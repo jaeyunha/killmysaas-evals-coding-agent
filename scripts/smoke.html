@@ -1,0 +1,19 @@
+<!doctype html>
+<html><head><title>sbek smoke page</title></head>
+<body>
+  <h1>Call for Papers</h1>
+  <nav><a href="#sessions">Sessions</a> <a href="#speakers">Speakers</a></nav>
+  <form id="cfp">
+    <label>Talk title <input name="title" placeholder="Your talk title"></label>
+    <label>Track
+      <select name="track">
+        <option>AI Engineering</option>
+        <option>Platform &amp; Infra</option>
+      </select>
+    </label>
+    <label>Abstract <textarea name="abstract"></textarea></label>
+    <label>Slides <input type="file" name="slides"></label>
+    <button type="button" id="submit-btn" onclick="document.getElementById('ok').textContent='Submission received: '+document.querySelector('[name=title]').value">Submit proposal</button>
+  </form>
+  <p id="ok"></p>
+</body></html>

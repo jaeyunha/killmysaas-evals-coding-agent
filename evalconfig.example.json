@@ -1,0 +1,19 @@
+{
+  "url": "https://your-submission.example.com",
+  "areas": [],
+  "includeOptional": false,
+  "credentials": {
+    "organizer": {
+      "email": "admin@your-submission.example.com",
+      "password": "provided-by-submitter",
+      "notes": "Pre-seeded admin account, if the submission ships one"
+    },
+    "speaker": { "email": "", "password": "" },
+    "reviewer": { "email": "", "password": "" }
+  },
+  "agentModel": "claude-opus-5",
+  "judgeModel": "claude-opus-5",
+  "maxTurnsPerScenario": 40,
+  "headless": true,
+  "submissionNotes": "Anything the graders should know: seeded demo data, signup flow quirks, which routes exist, etc."
+}
