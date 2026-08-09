@@ -25,16 +25,20 @@ export class BrowserSession {
     private readonly evidenceDir: string,
     private readonly headless: boolean,
     private readonly targetOrigin: string,
+    /** Playwright storageState file to restore (pre-authenticated persona). */
+    private readonly storageStatePath?: string,
   ) {}
 
   async start(): Promise<void> {
     this.browser = await chromium.launch({ headless: this.headless });
     try {
+      const useState = this.storageStatePath && fs.existsSync(this.storageStatePath);
       this.context = await this.browser.newContext({
         viewport: { width: 1280, height: 800 },
         // Consistent UA so clones don't serve mobile layouts.
         userAgent:
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 sbek-eval/0.1",
+        ...(useState ? { storageState: this.storageStatePath } : {}),
       });
       this.page = await this.context.newPage();
       this.page.setDefaultTimeout(10_000);
@@ -108,6 +112,12 @@ export class BrowserSession {
     const notes = this.pendingNotes.map((n) => `NOTE: ${n}`).join("\n");
     this.pendingNotes = [];
     return notes + "\n\n";
+  }
+
+  /** Persist cookies/localStorage so a persona's login survives into later scenarios. */
+  async saveStorageState(filePath: string): Promise<void> {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    await this.context.storageState({ path: filePath });
   }
 
   async stop(): Promise<void> {
@@ -289,6 +299,42 @@ export class BrowserSession {
     } catch {
       return `ERROR: clicking ${ref} did not open a file chooser and it is not a file input.`;
     }
+  }
+
+  /**
+   * Drag one element onto another. Agenda/schedule builders are commonly
+   * drag-and-drop, so this is load-bearing for those scenarios. Tries
+   * Playwright's dragTo first, then a manual mouse sequence (which some
+   * HTML5-DnD and pointer-event implementations require).
+   */
+  async drag(fromRef: string, toRef: string): Promise<string> {
+    const from = this.refLocator(fromRef);
+    const to = this.refLocator(toRef);
+    if ((await from.count()) === 0) return `ERROR: source ref ${fromRef} not found. Take a new snapshot.`;
+    if ((await to.count()) === 0) return `ERROR: target ref ${toRef} not found. Take a new snapshot.`;
+
+    await from.scrollIntoViewIfNeeded().catch(() => {});
+    try {
+      await from.dragTo(to, { timeout: 8_000 });
+    } catch {
+      // Manual fallback: some grids only respond to real pointer movement.
+      const a = await from.boundingBox();
+      const b = await to.boundingBox();
+      if (!a || !b) return `ERROR: could not compute drag geometry for ${fromRef} -> ${toRef}.`;
+      await this.page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+      await this.page.mouse.down();
+      // Intermediate moves: many DnD libraries ignore a single jump.
+      for (let i = 1; i <= 5; i++) {
+        await this.page.mouse.move(
+          a.x + a.width / 2 + ((b.x - a.x) * i) / 5,
+          a.y + a.height / 2 + ((b.y - a.y) * i) / 5,
+          { steps: 4 },
+        );
+      }
+      await this.page.mouse.up();
+    }
+    await this.page.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => {});
+    return this.snapshot();
   }
 
   async press(key: string): Promise<string> {

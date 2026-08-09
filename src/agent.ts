@@ -1,5 +1,7 @@
+import fs from "node:fs";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
+import { authStatePath } from "./auth.js";
 import type { EvalConfig, Scenario, ScenarioEvidence, ScreenshotRef, TranscriptEntry } from "./types.js";
 import { BrowserSession } from "./browser.js";
 import { FIXTURES_DIR } from "./specs.js";
@@ -46,6 +48,19 @@ const TOOLS: Anthropic.ToolUnion[] = [
       type: "object",
       properties: { ref: { type: "string" }, value: { type: "string" } },
       required: ["ref", "value"],
+    },
+  },
+  {
+    name: "drag",
+    description:
+      "Drag one element onto another (both refs from the latest snapshot). Use for drag-and-drop UIs — agenda/schedule builders usually place sessions this way. If a builder also offers click-to-select then click-a-slot, either approach is fine.",
+    input_schema: {
+      type: "object",
+      properties: {
+        from_ref: { type: "string", description: "Element to drag, e.g. an unscheduled session card" },
+        to_ref: { type: "string", description: "Drop target, e.g. a time slot cell" },
+      },
+      required: ["from_ref", "to_ref"],
     },
   },
   {
@@ -165,6 +180,9 @@ function renderCredentials(config: EvalConfig, startingPersona: string): string 
 
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "… (truncated)" : s);
 
+/** Actions after which a URL change triggers an automatic evidence screenshot. */
+const AUTO_SHOT_TOOLS = new Set(["navigate", "click", "press"]);
+
 /**
  * Runs one scenario with a manual agentic loop (custom client-side tools,
  * screenshots returned to the model as image blocks).
@@ -184,16 +202,21 @@ export async function runScenario(opts: {
   const observations: string[] = [];
   const maxTurns = config.maxTurnsPerScenario ?? 40;
 
+  // Restore a pre-authenticated session for this persona when one was captured.
+  const statePath = authStatePath(scenario.persona, config.url);
+  const preAuthed = fs.existsSync(statePath);
   const browser = new BrowserSession(
     evidenceDir,
     config.headless ?? true,
     new URL(config.url).origin,
+    preAuthed ? statePath : undefined,
   );
 
   let outcome: ScenarioEvidence["outcome"] = "agent_error";
   let summary = "Scenario did not finish.";
   let finalUrl: string | undefined;
   let started = false;
+  let lastShotUrl: string | undefined;
   let turn = 0;
 
   const messages: Anthropic.MessageParam[] = [
@@ -207,7 +230,9 @@ export async function runScenario(opts: {
             `FEATURE AREA: ${areaTitle}`,
             `SCENARIO ${scenario.id}: ${scenario.name}`,
             `PERSONA: ${scenario.persona}`,
-            renderCredentials(config, scenario.persona),
+            preAuthed
+              ? `AUTH: this browser is ALREADY SIGNED IN as the "${scenario.persona}" persona (session restored). Do not sign up or sign in again — go straight to the task. If you unexpectedly see a logged-out state, say so in an observation and continue as best you can.`
+              : renderCredentials(config, scenario.persona),
             ``,
             `SCRIPT:`,
             scenario.steps,
@@ -325,6 +350,9 @@ export async function runScenario(opts: {
             case "select":
               content = await browser.select(String(input.ref), String(input.value));
               break;
+            case "drag":
+              content = await browser.drag(String(input.from_ref), String(input.to_ref));
+              break;
             case "upload": {
               const fixtureFiles: Record<string, string> = {
                 headshot: "headshot.png",
@@ -397,6 +425,23 @@ export async function runScenario(opts: {
               ? clip(content, 500)
               : `(screenshot returned: ${screenshots.at(-1)?.path ?? ""})`,
         });
+
+        // Auto-capture evidence whenever an action lands on a new page. These
+        // are saved for the judge but NOT returned to the model, so richer
+        // evidence costs no agent tokens — models under-screenshot in practice.
+        if (AUTO_SHOT_TOOLS.has(tu.name) && !isError) {
+          try {
+            const url = browser.page?.url();
+            if (url && url !== lastShotUrl) {
+              lastShotUrl = url;
+              const slug = url.replace(/^https?:\/\/[^/]+/, "").replace(/[^a-z0-9]+/gi, "-") || "root";
+              const shot = await browser.screenshot(`auto${slug}`.slice(0, 55), false);
+              screenshots.push({ path: shot.relPath, label: `auto: ${url}`, turn });
+            }
+          } catch {
+            /* evidence capture is best-effort */
+          }
+        }
 
         results.push({
           type: "tool_result",

@@ -5,20 +5,35 @@
     "dates": "2027-05-12 to 2027-05-14",
     "location": "Moscone West, San Francisco, CA",
     "description": "A three-day, three-track conference on developer tooling, AI-assisted engineering, and platform infrastructure.",
-    "tracks": ["AI Engineering", "Platform & Infra", "Developer Experience"],
-    "session_formats": ["Keynote (45 min)", "Talk (30 min)", "Lightning Talk (10 min)", "Workshop (120 min)", "Panel (45 min)"],
-    "rooms": ["Main Stage", "Room 2A", "Room 2B", "Workshop Lab"]
+    "tracks": [
+      "AI Engineering",
+      "Platform & Infra",
+      "Developer Experience"
+    ],
+    "session_formats": [
+      "Keynote (45 min)",
+      "Talk (30 min)",
+      "Lightning Talk (10 min)",
+      "Workshop (120 min)",
+      "Panel (45 min)"
+    ],
+    "rooms": [
+      "Main Stage",
+      "Room 2A",
+      "Room 2B",
+      "Workshop Lab"
+    ]
   },
   "identities": {
     "organizer": {
       "name": "Jordan Alvarez",
-      "email": "jordan.organizer@sbek-test.example.com",
+      "email": "sbek-organizer@example.com",
       "password": "SbekTest!2027-org",
       "role": "Event Organizer / Admin"
     },
     "speaker": {
       "name": "Priya Raman",
-      "email": "priya.speaker@sbek-test.example.com",
+      "email": "sbek-speaker@example.com",
       "password": "SbekTest!2027-spk",
       "title": "Principal Engineer",
       "company": "Latticework Systems",
@@ -30,7 +45,7 @@
     },
     "speaker2": {
       "name": "Marcus Okafor",
-      "email": "marcus.speaker@sbek-test.example.com",
+      "email": "sbek-speaker2@example.com",
       "password": "SbekTest!2027-spk2",
       "title": "Staff Developer Advocate",
       "company": "Cloudreach Labs",
@@ -38,7 +53,7 @@
     },
     "reviewer": {
       "name": "Sam Whitfield",
-      "email": "sam.reviewer@sbek-test.example.com",
+      "email": "sbek-reviewer@example.com",
       "password": "SbekTest!2027-rev",
       "role": "Program Committee Reviewer"
     }
@@ -48,7 +63,7 @@
       "title": "Taming 40-Minute CI: Incremental Builds at Monorepo Scale",
       "format": "Talk (30 min)",
       "track": "Platform & Infra",
-      "abstract": "Our monorepo CI took 40 minutes on a good day. This talk walks through how we cut it to 6 minutes with content-addressed caching, remote execution, and a test-selection model — including the two migrations that failed first. You'll leave with a decision framework for which incremental-build investments pay off at which repo sizes, and the graphs to convince your platform team.",
+      "abstract": "Our monorepo CI took 40 minutes on a good day. This talk walks through how we cut it to 6 minutes with content-addressed caching, remote execution, and a test-selection model \u2014 including the two migrations that failed first. You'll leave with a decision framework for which incremental-build investments pay off at which repo sizes, and the graphs to convince your platform team.",
       "audience_level": "Intermediate",
       "notes_for_reviewers": "Previously presented a 10-minute version at PlatformCon; this is the expanded version with new data."
     },
@@ -56,7 +71,7 @@
       "title": "Your AI Pair Programmer Is Lying to You: Verification Patterns That Scale",
       "format": "Talk (30 min)",
       "track": "AI Engineering",
-      "abstract": "Code generation is easy; trusting it is hard. This session covers verification patterns for AI-generated code — property tests, mutation coverage, snapshot judges, and CI gates — with data from 18 months of running them on a 200-engineer codebase. Includes what we stopped doing because it didn't catch anything.",
+      "abstract": "Code generation is easy; trusting it is hard. This session covers verification patterns for AI-generated code \u2014 property tests, mutation coverage, snapshot judges, and CI gates \u2014 with data from 18 months of running them on a 200-engineer codebase. Includes what we stopped doing because it didn't catch anything.",
       "audience_level": "Advanced",
       "notes_for_reviewers": "Can also be delivered as a 120-minute hands-on workshop if the committee prefers."
     },
@@ -88,5 +103,6 @@
     "headshot": "fixtures/headshot.png",
     "slides": "fixtures/slides.pdf",
     "speakers_csv": "fixtures/speakers.csv"
-  }
+  },
+  "_email_note": "Placeholder addresses. To exercise email verification or magic-link flows, set personaEmails in evalconfig.json to inboxes you control (plus-addressing gives each persona a distinct account on one inbox, e.g. you+sbek-speaker@your-domain.com). Those values override the emails here at run time."
 }

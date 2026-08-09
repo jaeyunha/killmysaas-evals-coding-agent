@@ -2,18 +2,27 @@
   "url": "https://your-submission.example.com",
   "areas": [],
   "includeOptional": false,
+
+  "//personaEmails": "Point verification / magic-link mail at inboxes YOU control. Plus-addressing gives each persona its own account on a single inbox. These override the placeholder addresses in fixtures/sample-data.json at run time.",
+  "personaEmails": {
+    "organizer": "you+sbek-organizer@your-domain.com",
+    "speaker": "you+sbek-speaker@your-domain.com",
+    "speaker2": "you+sbek-speaker2@your-domain.com",
+    "reviewer": "you+sbek-reviewer@your-domain.com"
+  },
+
+  "//credentials": "Only for submissions with password login. Magic-link / OAuth submissions: use `npm run sbek -- auth --persona <name>` instead.",
   "credentials": {
     "organizer": {
       "email": "admin@your-submission.example.com",
       "password": "provided-by-submitter",
       "notes": "Pre-seeded admin account, if the submission ships one"
-    },
-    "speaker": { "email": "", "password": "" },
-    "reviewer": { "email": "", "password": "" }
+    }
   },
-  "agentModel": "claude-opus-5",
+
+  "agentModel": "claude-sonnet-5",
   "judgeModel": "claude-opus-5",
-  "maxTurnsPerScenario": 40,
+  "maxTurnsPerScenario": 70,
   "headless": true,
-  "submissionNotes": "Anything the graders should know: seeded demo data, signup flow quirks, which routes exist, etc."
+  "submissionNotes": "Anything the graders should know: seeded demo data, how to reach an organizer account, which routes exist, known quirks."
 }

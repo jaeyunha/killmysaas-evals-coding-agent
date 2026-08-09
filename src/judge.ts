@@ -34,7 +34,7 @@ Rules:
 - pass: the criterion is clearly satisfied. partial: works but with a meaningful gap named in your reasoning. fail: attempted and broken/incorrect. not_found: the agent searched and the capability appears absent. cannot_judge: the evidence is insufficient to decide (e.g. the agent was blocked before reaching it) — do NOT guess.
 - Distinguish "the clone lacks the feature" (not_found) from "the agent failed to reach it" (cannot_judge). Read the scenario outcome: 'blocked' or 'agent_error' usually means cannot_judge for downstream criteria.
 - Be strict about evidence for 'pass': a form existing is not proof submission works; look for confirmation states, persisted data, list entries.
-- Independently list defects you notice in the evidence (broken flows, error states, data loss, misleading UI), even if no rubric item covers them.
+- Independently list defects you notice IN THE EVALUATED APPLICATION (broken flows, error states, data loss, misleading UI), even if no rubric item covers them. Defects describe the app, never the evaluation run: a turn limit, an agent that got lost, a harness error, or missing evidence is NOT a defect — that belongs in area_notes and in cannot_judge verdicts.
 - Return a verdict for EVERY rubric item you were given, in the same order.`;
 
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "… (truncated)" : s);

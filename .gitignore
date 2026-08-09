@@ -3,3 +3,5 @@ runs/
 evalconfig.json
 *.log
 .env
+.auth/
+evalconfig.*.json

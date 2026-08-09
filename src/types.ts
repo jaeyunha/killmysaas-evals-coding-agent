@@ -128,10 +128,17 @@ export interface AreaScore {
   area: string;
   title: string;
   optional: boolean;
-  /** weighted points earned / weighted points auto-judgeable */
+  /** weighted points earned / weighted points actually judged */
   earned: number;
   judgeable: number;
+  /** Total weight of every rubric item in the area (judged or not). */
+  totalWeight: number;
   pct: number | null; // null when nothing was judgeable
+  /**
+   * Share of the area's rubric weight that was actually scored. A high pct on
+   * low coverage is a weak signal — read them together.
+   */
+  coveragePct: number;
   pendingManual: string[]; // rubric ids awaiting human verification
   items: JudgedItem[];
   defects: Defect[];
@@ -147,6 +154,13 @@ export interface RunReport {
   models: { agent: string; judge: string };
   areas: AreaScore[];
   overallPct: number | null;
+  /** Share of required-area rubric weight that was actually scored. */
+  overallCoveragePct: number;
+  /**
+   * True when coverage is too low for the headline score to be reportable.
+   * Consumers must show "insufficient coverage" instead of overallPct.
+   */
+  scoreWithheld: boolean;
   manualPending: number;
 }
 
@@ -164,7 +178,15 @@ export interface EvalConfig {
   url: string;
   /** Area slugs to run; empty/undefined = all non-optional + optional flagged with includeOptional. */
   areas?: string[];
+  /** Scenario ids to run within the selected areas; empty/undefined = all of them. */
+  scenarios?: string[];
   includeOptional?: boolean;
+  /**
+   * Override the fixture email for any persona (organizer, speaker, speaker2,
+   * reviewer, attendee). Use your own inbox — with plus-addressing for distinct
+   * accounts — when a submission verifies emails or sends magic links.
+   */
+  personaEmails?: Record<string, string>;
   credentials?: Record<string, PersonaCredentials>;
   agentModel?: string;
   judgeModel?: string;

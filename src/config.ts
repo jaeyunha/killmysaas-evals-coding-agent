@@ -5,7 +5,13 @@ import type { EvalConfig } from "./types.js";
 export const KIT_VERSION = "0.1.0";
 export const DEFAULT_AGENT_MODEL = "claude-opus-5";
 export const DEFAULT_JUDGE_MODEL = "claude-opus-5";
-export const DEFAULT_MAX_TURNS = 40;
+export const DEFAULT_MAX_TURNS = 70;
+/**
+ * Below this share of rubric weight judged, the headline score is withheld:
+ * a percentage computed over a fraction of the rubric is not comparable
+ * across submissions and reads far more favorably than it deserves.
+ */
+export const MIN_COVERAGE_PCT = 60;
 
 export interface CliArgs {
   command: string;
@@ -52,10 +58,10 @@ export function loadConfig(args: CliArgs): EvalConfig {
     );
   }
 
-  const areas =
-    typeof args.flags.areas === "string"
-      ? args.flags.areas.split(",").map((a) => a.trim()).filter(Boolean)
-      : fileConfig.areas;
+  const csv = (v: unknown) =>
+    typeof v === "string" ? v.split(",").map((a) => a.trim()).filter(Boolean) : undefined;
+  const areas = csv(args.flags.areas) ?? fileConfig.areas;
+  const scenarios = csv(args.flags.scenarios) ?? fileConfig.scenarios;
 
   const stringFlag = (name: string): string | undefined => {
     const v = args.flags[name];
@@ -63,14 +69,21 @@ export function loadConfig(args: CliArgs): EvalConfig {
     return typeof v === "string" && v.length > 0 ? v : undefined;
   };
 
+  const maxTurnsFlag = stringFlag("max-turns");
+  const maxTurns = maxTurnsFlag ? Number(maxTurnsFlag) : undefined;
+  if (maxTurnsFlag && (!Number.isFinite(maxTurns) || maxTurns! < 1)) {
+    throw new Error(`--max-turns must be a positive number (got "${maxTurnsFlag}")`);
+  }
+
   return {
     ...fileConfig,
     url,
     areas,
+    scenarios,
     includeOptional: Boolean(args.flags["include-optional"] ?? fileConfig.includeOptional),
     agentModel: stringFlag("agent-model") ?? fileConfig.agentModel ?? DEFAULT_AGENT_MODEL,
     judgeModel: stringFlag("judge-model") ?? fileConfig.judgeModel ?? DEFAULT_JUDGE_MODEL,
-    maxTurnsPerScenario: fileConfig.maxTurnsPerScenario ?? DEFAULT_MAX_TURNS,
+    maxTurnsPerScenario: maxTurns ?? fileConfig.maxTurnsPerScenario ?? DEFAULT_MAX_TURNS,
     headless: args.flags.headed ? false : fileConfig.headless ?? true,
   };
 }

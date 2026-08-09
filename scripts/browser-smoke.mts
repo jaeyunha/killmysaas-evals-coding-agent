@@ -38,6 +38,18 @@ try {
 
   const after = await b.snapshot();
   const confirmed = after.includes("Submission received: Taming 40-Minute CI");
+
+  // Drag-and-drop: agenda builders place sessions this way.
+  const cardRef = after.match(/\[(e\d+)\] <div[^>]*> SESS-1 Taming 40-Minute CI/)?.[1];
+  const slotRef = after.match(/\[(e\d+)\] <div[^>]*> Main Stage 10:00 \(empty slot\)/)?.[1];
+  if (!cardRef || !slotRef) {
+    console.error(after);
+    throw new Error("drag refs not found — is the drag widget rendered/tagged?");
+  }
+  const afterDrag = await b.drag(cardRef, slotRef);
+  const placed = afterDrag.includes("Scheduled: SESS-1 at Main Stage 10:00");
+  console.log(`drag ${cardRef} -> ${slotRef}: ${placed ? "session placed" : "NOT placed"}`);
+  if (!placed) throw new Error("drag did not place the session");
   const shot = await b.screenshot("smoke-final", false);
   console.log(`screenshot: ${shot.relPath} (${shot.base64.length} b64 chars)`);
   if (!confirmed) throw new Error("confirmation text not found in snapshot");

@@ -37,9 +37,26 @@ export function loadSpecs(specsDir = SPECS_DIR): Spec[] {
   return specs;
 }
 
-export function loadFixtures(): Record<string, unknown> {
+/**
+ * Loads the shared sample data. Persona emails are overridable per submission
+ * (config.personaEmails, or an email supplied in config.credentials) so anyone
+ * running the kit can point verification/magic-link mail at their own inbox
+ * instead of the placeholder addresses shipped here.
+ */
+export function loadFixtures(config?: {
+  personaEmails?: Record<string, string>;
+  credentials?: Record<string, { email?: string }>;
+}): Record<string, unknown> {
   const p = path.join(FIXTURES_DIR, "sample-data.json");
-  return JSON.parse(fs.readFileSync(p, "utf8"));
+  const data = JSON.parse(fs.readFileSync(p, "utf8"));
+  const identities = data.identities as Record<string, { email?: string }> | undefined;
+  if (!identities) return data;
+
+  for (const persona of Object.keys(identities)) {
+    const override = config?.personaEmails?.[persona] ?? config?.credentials?.[persona]?.email;
+    if (override) identities[persona].email = override;
+  }
+  return data;
 }
 
 function validateSpec(raw: any, file: string): Spec {

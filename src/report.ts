@@ -9,7 +9,7 @@ import type {
   Spec,
   Verdict,
 } from "./types.js";
-import { KIT_VERSION } from "./config.js";
+import { KIT_VERSION, MIN_COVERAGE_PCT } from "./config.js";
 
 const VERDICT_POINTS: Record<Verdict, number | null> = {
   pass: 1,
@@ -48,13 +48,16 @@ export function scoreArea(
     }
   }
 
+  const totalWeight = spec.rubric.reduce((s, r) => s + r.weight, 0);
   return {
     area: spec.area,
     title: spec.title,
     optional: Boolean(spec.optional),
     earned,
     judgeable,
+    totalWeight,
     pct: judgeable > 0 ? Math.round((earned / judgeable) * 1000) / 10 : null,
+    coveragePct: totalWeight > 0 ? Math.round((judgeable / totalWeight) * 1000) / 10 : 0,
     pendingManual,
     items: judgement.items,
     defects: judgement.defects,
@@ -70,9 +73,11 @@ export function buildReport(opts: {
   areas: AreaScore[];
 }): RunReport {
   const { targetUrl, startedAt, models, areas } = opts;
-  const required = areas.filter((a) => !a.optional && a.judgeable > 0);
+  const required = areas.filter((a) => !a.optional);
   const totalEarned = required.reduce((s, a) => s + a.earned, 0);
   const totalJudgeable = required.reduce((s, a) => s + a.judgeable, 0);
+  const totalWeight = required.reduce((s, a) => s + a.totalWeight, 0);
+  const coverage = totalWeight > 0 ? Math.round((totalJudgeable / totalWeight) * 1000) / 10 : 0;
   return {
     targetUrl,
     startedAt,
@@ -81,6 +86,8 @@ export function buildReport(opts: {
     models,
     areas,
     overallPct: totalJudgeable > 0 ? Math.round((totalEarned / totalJudgeable) * 1000) / 10 : null,
+    overallCoveragePct: coverage,
+    scoreWithheld: coverage < MIN_COVERAGE_PCT,
     manualPending: areas.reduce((s, a) => s + a.pendingManual.length, 0),
   };
 }
@@ -202,13 +209,19 @@ export function finalizeReport(runDir: string, specs: Spec[]): RunReport {
     }
     area.pendingManual = remaining;
     area.pct = area.judgeable > 0 ? Math.round((area.earned / area.judgeable) * 1000) / 10 : null;
+    area.coveragePct =
+      area.totalWeight > 0 ? Math.round((area.judgeable / area.totalWeight) * 1000) / 10 : 0;
   }
 
-  const required = report.areas.filter((a) => !a.optional && a.judgeable > 0);
+  const required = report.areas.filter((a) => !a.optional);
   const totalEarned = required.reduce((s, a) => s + a.earned, 0);
   const totalJudgeable = required.reduce((s, a) => s + a.judgeable, 0);
+  const totalWeight = required.reduce((s, a) => s + a.totalWeight, 0);
   report.overallPct =
     totalJudgeable > 0 ? Math.round((totalEarned / totalJudgeable) * 1000) / 10 : null;
+  report.overallCoveragePct =
+    totalWeight > 0 ? Math.round((totalJudgeable / totalWeight) * 1000) / 10 : 0;
+  report.scoreWithheld = report.overallCoveragePct < MIN_COVERAGE_PCT;
   report.manualPending = report.areas.reduce((s, a) => s + a.pendingManual.length, 0);
 
   fs.writeFileSync(path.join(runDir, "report.json"), JSON.stringify(report, null, 2));
@@ -240,7 +253,8 @@ export function writeHtmlReport(runDir: string, report: RunReport): void {
     <tr>
       <td><a href="#${esc(a.area)}">${esc(a.title)}</a>${a.optional ? " <em>(optional)</em>" : ""}</td>
       <td>${a.pct === null ? "—" : a.pct + "%"}</td>
-      <td>${a.earned.toFixed(1)} / ${a.judgeable}</td>
+      <td class="${a.coveragePct < 60 ? "lowcov" : ""}">${a.coveragePct}%</td>
+      <td>${a.earned.toFixed(1)} / ${a.judgeable} of ${a.totalWeight}</td>
       <td>${a.pendingManual.length}</td>
       <td>${a.defects.length}</td>
     </tr>`,
@@ -281,7 +295,7 @@ export function writeHtmlReport(runDir: string, report: RunReport): void {
         .join("");
       return `
       <section id="${esc(a.area)}">
-        <h2>${esc(a.title)} — ${a.pct === null ? "n/a" : a.pct + "%"}</h2>
+        <h2>${esc(a.title)} — ${a.pct === null ? "n/a" : a.pct + "%"} <small>(coverage ${a.coveragePct}% of rubric weight)</small></h2>
         <p>${esc(a.notes)}</p>
         <table><thead><tr><th>Item</th><th>Verdict</th><th>Confidence</th><th>Reasoning</th></tr></thead><tbody>${items}</tbody></table>
         ${a.pendingManual.length ? `<p><strong>Pending manual verification:</strong> ${a.pendingManual.map(esc).join(", ")} (see manual-checklist.md)</p>` : ""}
@@ -302,6 +316,10 @@ export function writeHtmlReport(runDir: string, report: RunReport): void {
   .shots { display: flex; flex-wrap: wrap; gap: 12px; }
   figure { margin: 0; } figcaption { font-size: 12px; color: #57606a; max-width: 320px; }
   .overall { font-size: 2.2rem; font-weight: 700; }
+  .cov { font-size: 1rem; font-weight: 600; color: #57606a; margin-left: .75rem; }
+  .lowcov { color: #cf222e; font-weight: 700; }
+  .withheld { color: #cf222e; }
+  .warn { background: #fff8c5; border: 1px solid #d4a72c; padding: .75rem 1rem; border-radius: 6px; }
   section { border-top: 1px solid #d0d7de; margin-top: 2rem; padding-top: 1rem; }
   details { margin: .5rem 0; } summary { cursor: pointer; }
 </style></head>
@@ -309,9 +327,17 @@ export function writeHtmlReport(runDir: string, report: RunReport): void {
   <h1>SessionBoard Eval Kit report</h1>
   <p>Target: <a href="${esc(report.targetUrl)}">${esc(report.targetUrl)}</a><br>
   Run: ${esc(report.startedAt)} → ${esc(report.finishedAt)} · kit v${esc(report.kitVersion)} · agent ${esc(report.models.agent)} · judge ${esc(report.models.judge)}</p>
-  <p class="overall">Overall: ${report.overallPct === null ? "n/a" : report.overallPct + "%"}</p>
+  ${
+    report.scoreWithheld
+      ? `<p class="overall withheld">Score withheld — insufficient coverage
+    <span class="cov lowcov">only ${report.overallCoveragePct}% of rubric weight judged</span></p>
+  <p class="warn"><strong>No headline score is reported for this run.</strong> A percentage computed over ${report.overallCoveragePct}% of the rubric is not comparable to other submissions and reads far better than it is evidenced. Provisional figure over the judged subset only: <strong>${report.overallPct === null ? "n/a" : report.overallPct + "%"}</strong>. To obtain a reportable score, work through <code>manual-checklist.md</code> and re-run <code>finalize</code>, and/or re-run the evaluation with a higher <code>--max-turns</code> or pre-authenticated personas.</p>`
+      : `<p class="overall">Overall: ${report.overallPct === null ? "n/a" : report.overallPct + "%"}
+    <span class="cov">coverage ${report.overallCoveragePct}%</span></p>
+  <p><strong>Read score and coverage together.</strong> The score is computed only over rubric weight that was actually judged; coverage is the share of total rubric weight that reached a verdict.</p>`
+  }
   <p>${report.manualPending} rubric item(s) awaiting manual verification — see <code>manual-checklist.md</code>.</p>
-  <table><thead><tr><th>Area</th><th>Score</th><th>Weighted points</th><th>Manual pending</th><th>Defects</th></tr></thead>
+  <table><thead><tr><th>Area</th><th>Score</th><th>Coverage</th><th>Weighted points</th><th>Manual pending</th><th>Defects</th></tr></thead>
   <tbody>${areaRows}</tbody></table>
   ${areaSections}
 </body></html>`;

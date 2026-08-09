@@ -36,12 +36,41 @@ npm run eval -- --url https://submission.example.com --dry-run   # validate spec
 npm run eval -- --url https://submission.example.com             # full evaluation
 ```
 
+Recommended grading config (cheap agent, strong judge — judge quality drives cross-submission fairness):
+
+```bash
+npm run eval -- --url <url> --agent-model claude-sonnet-5 --judge-model claude-opus-5
+```
+
 Outputs land in `runs/<timestamp>/`:
 
 - `report.html` — human-readable scored report with embedded screenshot evidence
 - `report.json` — machine-readable results
 - `manual-checklist.md` + `manual-results.json` — items needing human verification
 - `<scenario-id>/` — per-scenario evidence bundles (screenshots + transcript)
+
+### Personas behind magic-link / OAuth login
+
+Many submissions gate speaker and reviewer accounts behind emailed magic links or OAuth. The browser agent has no inbox and cannot complete those flows. Sign in once by hand instead:
+
+```bash
+npm run sbek -- auth --persona speaker    # opens a real browser window
+```
+
+Complete the login in **that** window (request the magic link, then paste the link into that window's address bar — a link opened in your own browser authenticates the wrong session). Press Enter and the kit saves the session to `.auth/<host>.<persona>.json`; every scenario for that persona then starts already signed in, and is told so, so it doesn't waste turns re-authenticating.
+
+Re-run `auth` whenever a session expires.
+
+**Use your own email addresses.** `fixtures/sample-data.json` ships placeholder addresses (`sbek-speaker@example.com`) that will never receive mail. To exercise real verification or magic-link flows, set `personaEmails` in `evalconfig.json` to inboxes you control — these override the fixture values at run time, and the agent fills forms with them:
+
+```json
+"personaEmails": {
+  "speaker":  "you+sbek-speaker@your-domain.com",
+  "reviewer": "you+sbek-reviewer@your-domain.com"
+}
+```
+
+Plus-addressing gives each persona a distinct account on a single inbox, so a submission that keys accounts by email still sees them as separate people. An `email` under `credentials` works as an override too, for password-login submissions.
 
 ### Manual verification (async)
 
@@ -53,13 +82,22 @@ npm run finalize -- --run runs/<timestamp>
 
 This rescores the report with your manual verdicts included. Items the agent was *blocked* from reaching (`cannot_judge`) also route to this queue, so a submission is never penalized for harness failures.
 
+`npm run sbek -- rescore --run <dir>` rebuilds `report.html`/`report.json` from a run's stored evidence and judgements with **no API calls** — useful after changing scoring logic, or to recover a report. Re-run `finalize` afterwards to re-apply manual verdicts.
+
 ## Useful flags
 
 ```bash
 npm run eval -- --url <url> --areas call-for-papers,public-widgets   # subset of areas
+npm run eval -- --url <url> --scenarios CFP-S1,CFP-S2                # subset of scenarios
 npm run eval -- --url <url> --include-optional                       # also run speaker-crm
 npm run eval -- --url <url> --headed                                 # watch the browser
+
+# Cheap pilot before a full run: one scenario, capped turns, small model
+npm run eval -- --url <url> --areas ai-agenda --scenarios AIA-S1 \
+  --max-turns 18 --agent-model claude-haiku-4-5 --judge-model claude-haiku-4-5
 ```
+
+Scenarios excluded by `--scenarios` are recorded as not-run, so rubric items depending on them are judged `cannot_judge` and routed to the manual queue rather than failed.
 
 ## Run semantics worth knowing
 
@@ -73,6 +111,7 @@ npm run eval -- --url <url> --headed                                 # watch the
 - Each rubric item has a weight: **3** (core — area is pointless without it), **2** (important), **1** (polish).
 - Judge verdicts map to points: `pass` = 1.0, `partial` = 0.5, `fail`/`not_found` = 0, `cannot_judge` = excluded and routed to the manual queue.
 - Area score = earned weighted points / judgeable weighted points. Overall = weighted aggregate across required (non-optional) areas.
+- **Coverage** is reported alongside every score: the share of total rubric weight that actually reached a verdict. Below **60% coverage the headline score is withheld entirely** and the report says "insufficient coverage" instead — a percentage computed over a fraction of the rubric is not comparable between submissions and reads far better than the evidence supports. Raise coverage by working the manual checklist, pre-authenticating personas, or re-running with more turns.
 - The judge must cite evidence (screenshot paths, observations, transcript turns) for every verdict, and independently reports **defects** it noticed even where no rubric item covers them.
 
 ## How it works
