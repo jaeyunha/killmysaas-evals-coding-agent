@@ -6,15 +6,36 @@ Judging is **implementation-agnostic**: submissions do not need to look like Ses
 
 ## What gets evaluated
 
-| Area | Spec | Weight profile |
-|---|---|---|
-| Call for Papers | `specs/01-call-for-papers.yaml` | core |
-| Abstract Management (review & disposition) | `specs/02-abstract-management.yaml` | core |
-| Speaker Management (incl. speaker portal) | `specs/03-speaker-management.yaml` | core |
-| Content Management (files, versions, approvals) | `specs/04-content-management.yaml` | core |
-| AI Agenda Builder | `specs/05-ai-agenda.yaml` | basics only |
-| Public Widgets (sessions list, speakers list, agenda, itinerary, speaker gallery) | `specs/06-public-widgets.yaml` | core |
-| Speaker CRM | `specs/07-speaker-crm.yaml` | **optional** (extra credit) |
+**96 rubric items across 20 scenarios in 7 areas** — 84 items (178 weighted points) are required, 12 items (19 points) are extra credit. Each item is individually judged and cited; a scenario is just the browser agent's unit of work, so several rubric items typically share one scenario run.
+
+| Area | Spec | Area weight | Scenarios | Rubric items | Item weight |
+|---|---|---:|---:|---:|---:|
+| Call for Papers | `specs/01-call-for-papers.yaml` | 20 | 4 | 16 | 34 |
+| Abstract Management (review depth & disposition) | `specs/02-abstract-management.yaml` | 20 | 3 | 14 | 28 |
+| Speaker Management (incl. speaker portal) | `specs/03-speaker-management.yaml` | 15 | 3 | 16 | 33 |
+| Content Management (files, versions, approvals) | `specs/04-content-management.yaml` | 15 | 3 | 14 | 31 |
+| AI Agenda Builder | `specs/05-ai-agenda.yaml` | 10 | 2 | 8 | 18 |
+| Public Widgets (sessions list, speakers list, agenda, itinerary, speaker gallery) | `specs/06-public-widgets.yaml` | 20 | 3 | 16 | 34 |
+| **Required total** | | **100** | **18** | **84** | **178** |
+| Speaker CRM | `specs/07-speaker-crm.yaml` | 10 | 2 | 12 | 19 |
+
+"Area weight" is each area's deliberate share of the overall score (required areas sum to 100) — set independently of how many rubric items the spec happens to contain, so a verbosely-specced area doesn't win more influence by accident. "Item weight" is the sum of each item's own 1/2/3 weight, used only *within* an area to rank its own items against each other.
+
+Every item also carries a `type` — what *kind* of problem it probes, not which area it lives in. Clones cluster hard on the easy types and fall over on the hard ones, so this cut is usually the most useful line in the report:
+
+| Type | What it probes | Required weight | Share |
+|---|---|---:|---:|
+| `crud` | create or edit something and it persists | 41 | 23% |
+| `roundtrip` | what one role/screen wrote is what another role/screen reads | 33 | 19% |
+| `exists` | the capability/screen is present and reachable at all | 26 | 15% |
+| `rule` | a stated constraint is actually enforced (deadline, conflict, filter, approval gate) | 22 | 12% |
+| `scoping` | a role sees exactly what it should, and nothing more | 18 | 10% |
+| `depth` | differentiators and polish beyond the core loop | 13 | 7% |
+| `bulk` | operations at scale — CSV import, bulk email, ZIP export, auto-distribution | 11 | 6% |
+| `side-effect` | egress the browser can't observe — real email delivery, calendar files | 8 | 5% |
+| `handoff` | data crosses a module boundary without re-entry (accepted → session → public) | 6 | 3% |
+
+`exists`/`crud` items are necessary but rarely discriminate — almost anything that ships passes them. `rule`/`scoping`/`handoff` are where clones actually fail (see [Calibration notes](#calibration-notes) below).
 
 Feature documentation — what each area is supposed to do, the user journeys, and how screens should look when filled with data — lives in [`docs/`](docs/). Rubric IDs in the report trace back to these docs.
 
@@ -99,6 +120,32 @@ npm run eval -- --url <url> --areas ai-agenda --scenarios AIA-S1 \
 
 Scenarios excluded by `--scenarios` are recorded as not-run, so rubric items depending on them are judged `cannot_judge` and routed to the manual queue rather than failed.
 
+## Watching a run, and resuming one
+
+A full evaluation takes about an hour, so it narrates itself. Every run writes a timestamped `runs/<ts>/run.log` (mirrored to stdout) with a line per agent turn:
+
+```bash
+tail -f runs/<ts>/run.log
+```
+```
+[07:22:14]   > CFP-S2: Speaker drafts, submits, and edits proposals [speaker]
+[07:22:18]       CFP-S2 turn 1/70: navigate(https://greenroom-hq.com/portal)
+[07:24:03]     outcome: completed (31 turns, 18 screenshots)
+[07:24:51]   score: 78.6% over 72% coverage (18/25 weight judged)  manual pending: 3  defects: 2
+```
+
+Use the log file rather than the process's stdout — piping stdout through `tail`/`less` buffers it for the whole hour; the file does not.
+
+**Resume instead of restarting:**
+
+```bash
+npm run eval -- --resume runs/<ts> [--config <file>]
+```
+
+Completed scenarios are reused from their `evidence.json` and fully-scored areas from `report.json`, with no browser and no API calls — you only pay for what didn't finish. Scenario evidence is written only on completion, so an interrupted scenario leaves no file and simply re-runs; there's no half-finished state to corrupt a resume. If the process dies, `run.log` ends with a `FATAL` line and the exact resume command.
+
+This is also the cheap way to raise coverage after the fact: re-run with `--max-turns 100 --resume <dir>` and only the scenarios that hit the cap will execute again.
+
 ## Run semantics worth knowing
 
 - **Areas chain, in order.** Scenarios build on state created by earlier areas against the same deployment (the CFP submissions become the reviewed abstracts, the accepted talks become the scheduled sessions, the published agenda feeds the public widgets). A full ordered run (01 → 07) is the intended mode; specs carry fallback steps ("if X doesn't exist yet, create it") so subset runs still work, but expect more seeding turns.
@@ -108,11 +155,21 @@ Scenarios excluded by `--scenarios` are recorded as not-run, so rubric items dep
 
 ## Scoring model
 
-- Each rubric item has a weight: **3** (core — area is pointless without it), **2** (important), **1** (polish).
-- Judge verdicts map to points: `pass` = 1.0, `partial` = 0.5, `fail`/`not_found` = 0, `cannot_judge` = excluded and routed to the manual queue.
-- Area score = earned weighted points / judgeable weighted points. Overall = weighted aggregate across required (non-optional) areas.
-- **Coverage** is reported alongside every score: the share of total rubric weight that actually reached a verdict. Below **60% coverage the headline score is withheld entirely** and the report says "insufficient coverage" instead — a percentage computed over a fraction of the rubric is not comparable between submissions and reads far better than the evidence supports. Raise coverage by working the manual checklist, pre-authenticating personas, or re-running with more turns.
+**Anatomy of a rubric item** (`specs/*.yaml`, validated at load time): `id`, `criterion`, `weight` (1/2/3), `type` (see the taxonomy table above), `testability` (`auto` | `auto-partial` | `manual`), `pass_criteria`, `evidence` (what the judge should look for), and — for `manual`/`auto-partial` items — `manual_instructions`. Scenarios are natural-language scripts under the same spec; keep them outcome-oriented and reference fixture values by name.
+
+- **Weight** (1/2/3, "polish"/"important"/"core") ranks an item against *its own area's* other items — 178 required points, distributed 31%/50%/19% across w3/w2/w1.
+- **Area weight** (see the table above) sets each area's *share of the overall score*, independent of item weight or item count — required areas sum to 100.
+- **Type** slices the same points by what kind of problem is being probed instead of by area (also above). Reporting only — it never changes a point total, but it's the fastest way to see *how* a submission is failing rather than just *how much*.
+- Judge verdicts map to points: `pass` = 1.0, `partial` = 0.5, `fail`/`not_found` = 0, `cannot_judge` = excluded from the denominator and routed to the manual queue.
+- Area score = earned weighted points / judgeable weighted points, using item weight. Overall score = area-weighted mean of area percentages (using area weight), renormalized over whichever required areas actually ran — so a `--areas` subset run still reports a meaningful number for what it covered.
+- **Coverage** is reported alongside every score (area-weighted the same way): the share of total rubric weight that actually reached a verdict. Below **60% coverage the headline score is withheld entirely** and the report says "insufficient coverage" instead — a percentage computed over a fraction of the rubric is not comparable between submissions and reads far better than the evidence supports. Raise coverage by working the manual checklist, pre-authenticating personas, or re-running with more turns.
 - The judge must cite evidence (screenshot paths, observations, transcript turns) for every verdict, and independently reports **defects** it noticed even where no rubric item covers them.
+
+Edit specs freely — add an item, change a weight, retag a type — then run `npm run eval -- --url x --dry-run` to validate, or `npm run sbek -- rescore --run <dir>` to rescore an existing run's stored evidence against the new rubric with no API calls.
+
+### Calibration notes
+
+The type breakdown above is the intended reading order for "is this a real implementation or a demo": `exists` and `crud` pass almost everywhere and don't separate submissions; `roundtrip` and `handoff` are the first place a two-sided flow (reviewer writes → organizer reads; accepted talk → scheduled session → public agenda) turns out to be one-sided; `rule` and `scoping` are where enforcement (deadlines, conflicts, authz isolation) either exists or doesn't, and are the strongest signal in the whole rubric — but also the items scenarios reach last, so they're the first thing a turn-limit cutoff eats. Read an area's `rule`/`scoping` row together with its coverage: a missing rule check that's `cannot_judge` because the scenario ran out of turns is very different from one that's `not_found` because the agent searched and it isn't there.
 
 ## How it works
 
@@ -135,7 +192,3 @@ Design choices worth knowing:
 - **`not_found` vs `cannot_judge`.** The agent explicitly distinguishes "I searched and this feature doesn't exist" from "I couldn't get there" — only the former counts against the submission.
 - **Fixture-driven inputs.** All form fills use `fixtures/sample-data.json` (the fictional *DevFlow Conf 2027*), so every submission is tested with identical data and the judge knows exactly what values to look for in filled states.
 - **Defect hunting.** Agents record bugs/broken flows as observations; the judge surfaces them in a per-area defect list with severities.
-
-## Adding or editing rubrics
-
-Specs are plain YAML validated at load time. Each rubric item needs `id`, `criterion`, `weight (1|2|3)`, `testability (auto | auto-partial | manual)`, `pass_criteria`, and — for manual items — `manual_instructions`. Scenarios are natural-language scripts; keep them outcome-oriented and reference fixture values by name. Run `npm run eval -- --url x --dry-run` to validate after editing.

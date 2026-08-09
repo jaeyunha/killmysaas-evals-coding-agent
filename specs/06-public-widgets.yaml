@@ -1,6 +1,7 @@
 area: public-widgets
 title: Public & Embeddable Widgets
 prefix: EMB
+area_weight: 20
 overview: >
   SessionBoard lets organizers publish live, self-updating event content to any
   website through five embeddable public widgets: a searchable/filterable List of
@@ -78,6 +79,7 @@ rubric:
   - id: EMB-01
     criterion: The public Sessions List widget renders a card per session showing title, truncated description with a Show more expansion, date/time, room, speaker names with job title and company, and Format/Track tags
     weight: 3
+    type: exists
     testability: auto
     scenarios: [EMB-S1]
     pass_criteria: At least 3 session cards each display title, description snippet, a date+time string, a room/location, at least one speaker with job title and company, and Format and Track values; clicking Show more (or equivalent) expands the description in place
@@ -85,6 +87,7 @@ rubric:
   - id: EMB-02
     criterion: Sessions List keyword search matches both session titles and speaker names, narrowing the visible cards and updating any result count
     weight: 2
+    type: rule
     testability: auto
     scenarios: [EMB-S1]
     pass_criteria: A title-word query leaves only matching session(s) and a speaker-surname query leaves only that speaker's session(s); any visible result count updates to match; partial credit if only title search works
@@ -92,6 +95,7 @@ rubric:
   - id: EMB-03
     criterion: Sessions List offers a faceted Filters control (at minimum Track, ideally also Format and Location) whose selections narrow the list to matching sessions
     weight: 2
+    type: rule
     testability: auto
     scenarios: [EMB-S1]
     pass_criteria: A filter panel/control exists with at least a Track facet; selecting one track leaves only cards carrying that track; full credit requires Format and Location/room facets too
@@ -99,6 +103,7 @@ rubric:
   - id: EMB-04
     criterion: The public Speakers List widget shows a directory of speakers (ordered alphabetically by surname) with headshot, name, job title, and company per entry
     weight: 3
+    type: exists
     testability: auto
     scenarios: [EMB-S1]
     pass_criteria: A speaker directory distinct from raw session data exists; entries show photo, name, job title, and company; ordering across the first several entries is alphabetical by surname (ordering alone, if violated, costs partial credit rather than a fail)
@@ -106,6 +111,7 @@ rubric:
   - id: EMB-05
     criterion: Each Speakers List entry drills into a detail view with the speaker's bio and their sessions (title, date/time, room), and the directory supports search by speaker name
     weight: 2
+    type: roundtrip
     testability: auto
     scenarios: [EMB-S1]
     pass_criteria: Opening a speaker shows a bio and a per-speaker session sublist where each session has title, date/time, and room; typing an exact speaker name in the directory search narrows to that speaker
@@ -113,6 +119,7 @@ rubric:
   - id: EMB-06
     criterion: The public Agenda widget renders a per-day schedule organized by time — a grid with room/location columns and a time gutter, or an equivalent day/track/time-structured layout — with session blocks placed at their correct room and time showing at least title and track/format
     weight: 3
+    type: exists
     testability: auto
     scenarios: [EMB-S1]
     pass_criteria: An agenda view structured by day and time exists (grid with location columns preferred; a clearly time-slotted list is acceptable); one sampled session appears at the correct room/time position with title and a track or format label
@@ -120,6 +127,7 @@ rubric:
   - id: EMB-07
     criterion: Agenda day navigation (chevrons, tabs, or date picker) switches between event days and re-renders that day's sessions
     weight: 2
+    type: rule
     testability: auto
     scenarios: [EMB-S1]
     pass_criteria: Activating day navigation changes the visible day label AND the rendered sessions (at least one session differs between the two captured days)
@@ -127,13 +135,15 @@ rubric:
   - id: EMB-08
     criterion: Clicking an agenda session block opens a detail view with the full start-end time range, room, description, Format, and Track, and a Back/close control restores the agenda
     weight: 2
+    type: exists
     testability: auto
     scenarios: [EMB-S1]
     pass_criteria: "Detail view shows title, full time range, room, description, and Format/Track values (a Subsessions section is bonus, per SessionBoard, not required); Back/close returns to the intact agenda"
     evidence: Screenshot of the open detail view and of the restored agenda afterwards
   - id: EMB-09
     criterion: The public Schedule Itinerary widget lists sessions chronologically within day tabs/sections, with cards showing track label, title, description, full date/time, room, and the complete speaker list with titles and companies
-    weight: 3
+    weight: 2
+    type: exists
     testability: auto
     scenarios: [EMB-S2]
     pass_criteria: Day tabs or day sections exist for the multi-day event; sessions within a day appear in ascending time order (time-group headers are ideal); one sampled card shows track, title, description, date/time, room, and every listed speaker with job title and company
@@ -141,6 +151,7 @@ rubric:
   - id: EMB-10
     criterion: "Personal schedule building (inferred from category norms; not visible in SessionBoard's live itinerary example): the attendee can add/star sessions from the itinerary and view a personal schedule containing exactly the chosen sessions"
     weight: 1
+    type: depth
     testability: auto
     scenarios: [EMB-S2]
     pass_criteria: An add/star/bookmark control exists on itinerary cards; after adding two sessions, a personal-schedule view (My Schedule or equivalent filter) shows exactly those two sessions in time order; removing one updates the view
@@ -148,6 +159,7 @@ rubric:
   - id: EMB-11
     criterion: The personal schedule persists across a full page reload, and an export/add-to-calendar affordance is offered for the selection
     weight: 1
+    type: depth
     testability: auto-partial
     scenarios: [EMB-S2]
     pass_criteria: After a browser reload the previously added sessions are still marked/present in the personal view (via localStorage or an account); an export/iCal/add-to-calendar control exists and reports success when activated — the downloaded file's correctness is the manual half
@@ -155,14 +167,16 @@ rubric:
     manual_instructions: "In a normal browser, add 2 sessions to the personal schedule, trigger the export/add-to-calendar action, and download the .ics (or open the calendar link). Import it into a calendar app and confirm both sessions appear with the correct titles, dates (event days 2027-05-12..14), start/end times, and rooms/locations. Also revisit the widget the next day (or in a new tab of the same profile) to confirm longer-term persistence."
   - id: EMB-12
     criterion: The public Speaker Gallery widget renders a visual photo grid of speaker cards (headshot, name, job title, company), alphabetized by surname, with a search-by-name box, degrading gracefully for speakers missing a photo or title
-    weight: 3
+    weight: 2
+    type: exists
     testability: auto
     scenarios: [EMB-S1]
     pass_criteria: A grid layout visually distinct from the speakers list exists; cards show headshot, name, job title, company; name search narrows the grid to the matching speaker; a photo-less speaker (if any exists in the data) renders with a fallback rather than breaking the grid; surname ordering is partial credit
     evidence: Grid screenshot, search-narrowed screenshot, and the agent's card-field and fallback observations
   - id: EMB-13
     criterion: "Clicking a gallery card opens a speaker detail (modal or panel) with photo, name, job title, bio with Show more, company, and a sessions list giving each session's title, date/time, and room; closing it returns to the intact grid"
-    weight: 2
+    weight: 1
+    type: exists
     testability: auto
     scenarios: [EMB-S1]
     pass_criteria: "The detail shows photo, name, title, bio, company, and the speaker's sessions each with title, date/time, and room (a 'Sessions (N)' count is a plus); Back/Close restores the grid in its prior state"
@@ -170,6 +184,7 @@ rubric:
   - id: EMB-14
     criterion: All five widget surfaces (sessions list, speakers list, agenda, schedule itinerary, speaker gallery) are publicly reachable and fully readable without any login or account
     weight: 3
+    type: scoping
     testability: auto
     scenarios: [EMB-S1, EMB-S2]
     pass_criteria: Every widget surface the clone implements loads with populated content in a logged-out browser, with no auth wall, forced redirect to login, or blurred/gated content; itinerary BROWSING must be anonymous (personal-schedule saving may require an account without failing this item, if the agent noted that)
@@ -177,6 +192,7 @@ rubric:
   - id: EMB-15
     criterion: An organizer-side embed/share area lets the organizer generate an embeddable snippet or shareable URL per widget type, with configuration such as output format, branding/colors, content filters, and field selection
     weight: 2
+    type: handoff
     testability: auto-partial
     scenarios: [EMB-S3]
     pass_criteria: The agent finds an embeds/share/publish area, sees widget-type choices covering most of the five, configures and saves an embed, and captures a generated snippet or URL; full credit needs multiple output formats (styled HTML script, basic HTML, JSON/XML, iCal) and filter/field/branding options per SessionBoard — the snippet actually rendering inside a third-party page is the manual half
@@ -184,7 +200,8 @@ rubric:
     manual_instructions: "Copy the generated styled-HTML snippet into a blank .html file on a different origin (e.g. a local file or codepen), open it, and confirm the widget renders with live event data, reflects any configured colors/filters/hidden fields, and remains interactive (search/detail). If JSON/XML/iCal formats are offered, fetch each endpoint and confirm the JSON/XML contains session/speaker data and the iCal imports the approved sessions into a calendar app."
   - id: EMB-16
     criterion: Widget data is consistent across surfaces and with the organizer-side source — the same session shows identical title, date/time, room, and track everywhere it appears, and matches the organizer's record without republishing
-    weight: 2
+    weight: 3
+    type: roundtrip
     testability: auto-partial
     scenarios: [EMB-S1, EMB-S3]
     pass_criteria: "The consistency samples show no mismatches: one session's title/date/time/room/track identical across at least two public widgets (EMB-S1), one speaker's name/title/company identical between speakers list and gallery (EMB-S1), and one session's public rendering matching its organizer-side record (EMB-S3). Tolerance: a leftover 'UPDATED: ' title prefix from area 04's edit test (whose final revert step may have failed) is NOT a mismatch, provided the prefixed title is identical across surfaces. This point-in-time consistency is the auto half; propagation of organizer edits to the already-embedded widget without republishing is the manual half"

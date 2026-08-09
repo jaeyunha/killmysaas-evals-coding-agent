@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { loadConfig, newRunDir, parseArgs, KIT_VERSION, MIN_COVERAGE_PCT } from "./config.js";
 import { loadFixtures, loadSpecs, selectSpecs } from "./specs.js";
 import { captureAuth, hasAuthState } from "./auth.js";
+import { initLog, log, closeLog } from "./log.js";
 import { runScenario } from "./agent.js";
 import { judgeArea } from "./judge.js";
 import { buildReport, scoreArea, writeHtmlReport, writeManualChecklist, finalizeReport } from "./report.js";
@@ -21,6 +22,8 @@ Commands:
       [--scenarios ID,ID]      Only these scenario ids (within the selected areas)
       [--max-turns N]          Cap agent turns per scenario (default 70)
       [--include-optional]     Include optional (extra-credit) areas
+      [--resume <run dir>]     Continue a previous run: completed scenarios and
+                               scored areas are reused, nothing is re-paid for
       [--config <file>]        Config file (default evalconfig.json)
       [--dry-run]              Validate specs + print the plan; no browser, no API calls
       [--headed]               Show the browser window
@@ -137,20 +140,39 @@ async function main() {
   }
 
   const client = new Anthropic(); // resolves ANTHROPIC_API_KEY / auth profile from env
-  const runDir = newRunDir();
-  console.log(`Run dir: ${runDir}`);
-  const startedAt = new Date().toISOString();
+
+  // --resume <dir>: reuse a previous run's completed scenarios and area scores.
+  // Scenario evidence.json is written only on completion, so an interrupted
+  // scenario has no file and simply re-runs.
+  const resumeDir = typeof args.flags.resume === "string" ? args.flags.resume : undefined;
+  if (resumeDir && !fs.existsSync(resumeDir)) throw new Error(`No such run dir: ${resumeDir}`);
+  const runDir = resumeDir ?? newRunDir();
+  const logFile = initLog(runDir);
+
+  const priorAreas = new Map<string, AreaScore>();
+  let startedAt = new Date().toISOString();
+  if (resumeDir) {
+    const priorPath = path.join(runDir, "report.json");
+    if (fs.existsSync(priorPath)) {
+      const prior: RunReport = JSON.parse(fs.readFileSync(priorPath, "utf8"));
+      for (const a of prior.areas) priorAreas.set(a.area, a);
+      startedAt = prior.startedAt;
+    }
+    log(`Resuming ${runDir} — ${priorAreas.size} area(s) already scored`);
+  }
+  log(`Run dir: ${runDir}`);
+  log(`Live log: tail -f ${logFile}`);
   const areaScores: AreaScore[] = [];
 
   const personas = [...new Set(specs.flatMap((s) => s.scenarios.map((sc) => sc.persona)))];
   const preAuthed = personas.filter((p) => hasAuthState(p, config.url));
-  if (preAuthed.length) console.log(`Pre-authenticated personas: ${preAuthed.join(", ")}`);
+  if (preAuthed.length) log(`Pre-authenticated personas: ${preAuthed.join(", ")}`);
   const unauthed = personas.filter((p) => !preAuthed.includes(p) && !config.credentials?.[p]);
   if (unauthed.length) {
-    console.log(
+    log(
       `No saved session or credentials for: ${unauthed.join(", ")} — those scenarios will sign up themselves, or end 'blocked' if the app requires email verification.`,
     );
-    console.log(`  Tip: npm run sbek -- auth --persona <name>`);
+    log(`  Tip: npm run sbek -- auth --persona <name>`);
   }
 
   // Incremental persistence: after each area, write a partial report so a
@@ -169,8 +191,21 @@ async function main() {
   };
 
   for (const spec of specs) {
-    console.log(`\n=== Area: ${spec.title} ===`);
+    log(`\n=== Area: ${spec.title} ===`);
+
+    // Whole area already scored and unchanged? Reuse it — no browser, no API.
+    const prior = priorAreas.get(spec.area);
+    const priorComplete =
+      prior &&
+      spec.scenarios.every((sc) => fs.existsSync(path.join(runDir, sc.id, "evidence.json")));
+    if (priorComplete) {
+      log(`  reusing scored area from previous run (${prior!.pct ?? "n/a"}%)`);
+      areaScores.push(prior!);
+      continue;
+    }
+
     const evidence: ScenarioEvidence[] = [];
+    let reusedAll = true;
 
     for (const scenario of spec.scenarios) {
       if (config.scenarios?.length && !config.scenarios.includes(scenario.id)) {
@@ -193,7 +228,7 @@ async function main() {
       const personaReady =
         Boolean(config.credentials?.[scenario.persona]) || hasAuthState(scenario.persona, config.url);
       if (scenario.requires_credentials && !personaReady) {
-        console.log(`  ~ ${scenario.id} skipped (needs '${scenario.persona}' credentials)`);
+        log(`  ~ ${scenario.id} skipped (needs '${scenario.persona}' credentials)`);
         evidence.push({
           scenarioId: scenario.id,
           scenarioName: scenario.name,
@@ -208,8 +243,17 @@ async function main() {
         });
         continue;
       }
-      console.log(`  > ${scenario.id}: ${scenario.name}`);
       const evidenceDir = path.join(runDir, scenario.id);
+      const evidenceFile = path.join(evidenceDir, "evidence.json");
+      if (fs.existsSync(evidenceFile)) {
+        const prev: ScenarioEvidence = JSON.parse(fs.readFileSync(evidenceFile, "utf8"));
+        log(`  = ${scenario.id}: reusing evidence (${prev.outcome}, ${prev.screenshots.length} screenshots)`);
+        evidence.push(prev);
+        continue;
+      }
+
+      reusedAll = false;
+      log(`  > ${scenario.id}: ${scenario.name} [${scenario.persona}]`);
       fs.mkdirSync(evidenceDir, { recursive: true });
       const result = await runScenario({
         client,
@@ -219,16 +263,16 @@ async function main() {
         fixtures,
         evidenceDir,
       });
-      console.log(`    outcome: ${result.outcome} (${result.turns} turns, ${result.screenshots.length} screenshots)`);
+      log(`    outcome: ${result.outcome} (${result.turns} turns, ${result.screenshots.length} screenshots)`);
       evidence.push(result);
       fs.writeFileSync(path.join(evidenceDir, "evidence.json"), JSON.stringify(result, null, 2));
     }
 
-    console.log(`  judging ${spec.rubric.filter((r) => r.testability !== "manual").length} rubric item(s)...`);
+    log(`  judging ${spec.rubric.filter((r) => r.testability !== "manual").length} rubric item(s)...`);
     try {
       const judgement = await judgeArea({ client, config, spec, evidence, runDir });
       const score = scoreArea(spec, judgement, evidence);
-      console.log(
+      log(
         `  score: ${score.pct ?? "n/a"}% over ${score.coveragePct}% coverage (${score.judgeable}/${score.totalWeight} weight judged)  manual pending: ${score.pendingManual.length}  defects: ${score.defects.length}`,
       );
       areaScores.push(score);
@@ -257,21 +301,29 @@ async function main() {
 
   const report = writeArtifacts();
   if (report.scoreWithheld) {
-    console.log(
+    log(
       `\nSCORE WITHHELD — only ${report.overallCoveragePct}% of rubric weight was judged (need ${MIN_COVERAGE_PCT}%).` +
         `\n  Provisional over the judged subset only: ${report.overallPct ?? "n/a"}% — not comparable across submissions.` +
         `\n  Raise coverage by working manual-checklist.md then running finalize, or re-run with more turns / pre-authenticated personas.`,
     );
   } else {
-    console.log(
+    log(
       `\nOverall: ${report.overallPct ?? "n/a"}%  (coverage: ${report.overallCoveragePct}% of rubric weight judged)`,
     );
   }
-  console.log(`Report:  ${path.join(runDir, "report.html")}`);
-  console.log(`Manual:  ${path.join(runDir, "manual-checklist.md")} (${report.manualPending} item(s))`);
+  log(`Report:  ${path.join(runDir, "report.html")}`);
+  log(`Manual:  ${path.join(runDir, "manual-checklist.md")} (${report.manualPending} item(s))`);
+  closeLog();
 }
 
 main().catch((err) => {
+  // Log the failure into run.log too, and point at the resume command — the
+  // run directory already holds every completed scenario and area score.
+  try {
+    log(`FATAL: ${err?.message ?? String(err)}`);
+    log(`Resume with: npm run eval -- --resume <run dir> [--config <file>]`);
+    closeLog();
+  } catch {}
   console.error(err?.stack ?? String(err));
   process.exit(1);
 });

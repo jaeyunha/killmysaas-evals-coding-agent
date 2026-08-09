@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { authStatePath } from "./auth.js";
+import { log } from "./log.js";
 import type { EvalConfig, Scenario, ScenarioEvidence, ScreenshotRef, TranscriptEntry } from "./types.js";
 import { BrowserSession } from "./browser.js";
 import { FIXTURES_DIR } from "./specs.js";
@@ -152,6 +153,10 @@ Ground rules:
 - Stay on ${origin} (and its subpaths). Never navigate to other sites. Never enter real personal data, payment details, or credentials other than the test values you are given.
 - The implementation will NOT look like SessionBoard. Judge by function, not appearance. Hunt for equivalent features under different names (e.g. "Call for Papers" might be "Submissions", "Apply to speak", "CFP").
 - Be persistent but bounded: if a path fails, try one or two plausible alternatives (nav menus, footer links, obvious URLs like /cfp, /speakers, /agenda, /admin, /dashboard) before concluding 'feature_not_found' or 'blocked'.
+- ADAPT THE SCRIPT TO THE APP, BUT NEVER HIDE A MISSING CAPABILITY. The scenario's sample *values* (person names, talk titles, dates) are a convenience — if the app signs you in as a fixed demo identity or is pre-seeded, exercise the same capability against the data that exists and note what stood in for what. But when the app cannot do something the script asks for, that is a FINDING about the product, not a data mismatch to paper over: record an explicit observation naming the missing capability and what you tried, then continue with existing data so the rest of the scenario still produces evidence.
+- Multi-event support is graded. If you cannot create a second event, or the app has no event-creation UI or event switcher at all, say so explicitly in an observation ("no event creation UI found at X, Y, Z; the app appears to be single-event") — do not silently reuse the seeded event as though the step succeeded.
+- Reserve 'blocked' for when the capability itself is unreachable (a hard auth wall you cannot pass, a crash, a flow that does not exist), not for a mismatch between the script's sample data and the app's seeded data.
+- Budget your turns. You have a limited number; spend them on evidence for the rubric, not on exhaustive URL guessing. If something is not discoverable after a few tries, record that as an observation (it is a real finding about the product) and move on to the next step.
 - If the app requires signup to proceed and no credentials were provided, create a throwaway account using the test identity from the scenario data (never a real email — use the provided fixture email).
 - Collect evidence as you go: screenshot every meaningful state and record observations. A scenario without screenshots is worthless to the judge.
 - Note bugs, dead links, console-visible errors, broken validation, and confusing flows as observations — finding defects is part of the job.
@@ -282,6 +287,17 @@ export async function runScenario(opts: {
       const toolUses = response.content.filter(
         (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
       );
+
+      if (toolUses.length > 0) {
+        const summary = toolUses
+          .map((t) => {
+            const i = t.input as Record<string, any>;
+            const arg = i.url ?? i.label ?? i.ref ?? i.note ?? i.outcome ?? i.key ?? "";
+            return `${t.name}${arg ? `(${String(arg).slice(0, 40)})` : ""}`;
+          })
+          .join(", ");
+        log(`      ${scenario.id} turn ${turn}/${maxTurns}: ${summary}`);
+      }
 
       if (toolUses.length === 0) {
         if (response.stop_reason === "max_tokens") {

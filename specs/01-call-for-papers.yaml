@@ -1,6 +1,7 @@
 area: call-for-papers
 title: Call for Papers
 prefix: CFP
+area_weight: 20
 overview: >
   SessionBoard's Call for Papers module runs the submission side of the proposal
   lifecycle end-to-end. Organizers build a custom submission form (multiple field
@@ -214,13 +215,15 @@ rubric:
   - id: CFP-01
     criterion: "Organizer can build a custom submission form — adding fields of at least 3 types (short text, long text, dropdown) with required/optional flags — and the changes render on the public form with required-field validation enforced"
     weight: 3
+    type: crud
     testability: auto
     scenarios: [CFP-S1, CFP-S2]
     pass_criteria: "The added fields ('Key takeaway' required text, 'Audience level' dropdown with 3 options) appear on the public form with correct types and options, and attempting to submit with a required field empty is blocked with a visible validation error"
     evidence: "Builder screenshot showing the added fields and required flags; public-form screenshot showing them rendered; screenshot of a validation error on an empty required field (from S1 logged-out or S2 as the speaker)"
   - id: CFP-02
     criterion: "Submission form supports conditional logic: a field configured to show only for a given session format (or track) appears and disappears based on the submitter's selection"
-    weight: 2
+    weight: 1
+    type: depth
     testability: auto
     scenarios: [CFP-S1, CFP-S2]
     pass_criteria: "The 'Workshop prerequisites' field is visible when format 'Workshop (120 min)' is selected and hidden when 'Talk (30 min)' is selected — visibility follows the controlling answer in both directions"
@@ -228,13 +231,15 @@ rubric:
   - id: CFP-03
     criterion: "A public CFP portal is reachable without any login and shows event branding/name, the submission deadline, and the configured tracks and formats as selectable options"
     weight: 3
+    type: exists
     testability: auto
     scenarios: [CFP-S1, CFP-S2]
     pass_criteria: "The portal URL loads in a logged-out context showing the event name, a visible deadline/close date, and a form (or entry point) whose track and format options match the fixture configuration"
     evidence: "Logged-out screenshot of the portal with event name and deadline; screenshot of the open track/format dropdowns showing the fixture options (from CFP-S1, or CFP-S2 if the form requires an account first); the recorded portal URL observation"
   - id: CFP-04
     criterion: "The portal enforces the configured submission window: once the close date is in the past, the public portal blocks new submissions with a closed state"
-    weight: 3
+    weight: 2
+    type: rule
     testability: auto
     scenarios: [CFP-S4]
     pass_criteria: "After the organizer sets the close date to a past date, the logged-out portal shows a closed/'submissions closed' state with no way to start or submit a new proposal"
@@ -242,6 +247,7 @@ rubric:
   - id: CFP-05
     criterion: "A speaker can create a submitter account from the portal, complete and submit a proposal, see an on-screen confirmation, and find the submission listed with a status in their own dashboard"
     weight: 3
+    type: crud
     testability: auto
     scenarios: [CFP-S2]
     pass_criteria: "Account creation succeeds, the 'Taming 40-Minute CI' fixture proposal submits, a confirmation state is shown, and the submitter dashboard lists the proposal with a status label (Submitted / Under Review / Pending or equivalent)"
@@ -249,6 +255,7 @@ rubric:
   - id: CFP-06
     criterion: "Submitted data round-trips to the organizer: the submission appears in the organizer's list with title, abstract, track, format, and custom-field values intact"
     weight: 3
+    type: roundtrip
     testability: auto
     scenarios: [CFP-S2, CFP-S3]
     pass_criteria: "The organizer's submissions list shows both fixture proposals, and the detail view of 'Taming 40-Minute CI' shows the same title, track 'Platform & Infra', format, audience level, and abstract text the speaker entered, with no lost or mangled fields"
@@ -256,13 +263,15 @@ rubric:
   - id: CFP-07
     criterion: "The public form supports saving an in-progress submission as a draft (with as little as a title) and resuming it on return"
     weight: 1
+    type: depth
     testability: auto
     scenarios: [CFP-S2]
     pass_criteria: "With only the title entered, a save-as-draft action succeeds, some draft indicator is shown, and on returning to the form the draft is offered for resume or the saved data is pre-filled"
     evidence: "Screenshot of the draft banner/indicator after saving; screenshot after returning showing the resume prompt or the pre-filled title; agent observation if the feature is absent"
   - id: CFP-08
     criterion: Submitting a proposal triggers an automated confirmation email to the submitter referencing the submission
-    weight: 2
+    weight: 1
+    type: side-effect
     testability: manual
     pass_criteria: "A confirmation email arrives at the submitter's address within a few minutes of submitting, referencing the event and the submitted title; if the clone exposes an in-app email log/outbox, a logged message with correct recipient and title also passes"
     evidence: "Screenshot of the received email (or in-app email log entry) showing recipient, subject, and the submission title"
@@ -270,6 +279,7 @@ rubric:
   - id: CFP-09
     criterion: "A submitter can edit an existing submission while the CFP is open, and the edited content is what the organizer subsequently sees (inferred norm from Sessionize/EasyChair, confirmed by SessionBoard participant docs)"
     weight: 2
+    type: roundtrip
     testability: auto
     scenarios: [CFP-S2, CFP-S3]
     pass_criteria: "The appended abstract sentence ('Updated: now includes 2026 benchmark data.') persists across reload in the speaker's view and appears verbatim in the organizer's view of the same submission"
@@ -277,6 +287,7 @@ rubric:
   - id: CFP-10
     criterion: "Organizer can provision a reviewer (create/invite with usable credentials) and the reviewer role is separated from admin: signed in as the reviewer, a reviewer-facing dashboard is shown with no organizer/admin navigation or capability exposed. Exact assigned-queue scoping ('the queue contains exactly the assigned set, nothing else') is deliberately deferred to abstract-management's ABS-05 and not scored here."
     weight: 2
+    type: scoping
     testability: auto
     scenarios: [CFP-S3]
     pass_criteria: "Sam Whitfield is created/invited with credentials the agent can use, signs in successfully, and lands on a reviewer-facing dashboard that exposes no admin navigation or organizer capability. Whether his queue contains exactly the assigned submissions is graded once, by ABS-05 — do not double-count it here."
@@ -284,6 +295,7 @@ rubric:
   - id: CFP-11
     criterion: "A reviewer can record a review on an assigned submission (a rating plus a text comment) and the recorded review is visible to the organizer, with completion state updating on the reviewer dashboard. Scorecard field-type depth (numeric/dropdown/free-text criteria editors) is graded by abstract-management's ABS-03, not here."
     weight: 2
+    type: roundtrip
     testability: auto
     scenarios: [CFP-S3, CFP-S4]
     pass_criteria: "The rating of 4 and the fixture comment are accepted and persist; the reviewer dashboard marks the item reviewed/completed; the organizer's view of the submission shows the same rating and comment. No scorecard field-type variety is required here (see ABS-03)."
@@ -291,6 +303,7 @@ rubric:
   - id: CFP-12
     criterion: "Organizer can record accept and reject decisions on submissions, and the admin list reflects the distinct decision statuses"
     weight: 3
+    type: crud
     testability: auto
     scenarios: [CFP-S4]
     pass_criteria: "'Taming 40-Minute CI' is marked Accepted and 'Your AI Pair Programmer Is Lying to You' is marked Rejected; both statuses persist and are shown distinctly in the organizer's submissions list"
@@ -298,6 +311,7 @@ rubric:
   - id: CFP-13
     criterion: "Decision statuses propagate to the submitter: the speaker's own dashboard reflects Accepted/Rejected for the corresponding proposals"
     weight: 2
+    type: roundtrip
     testability: auto
     scenarios: [CFP-S4]
     pass_criteria: "Signed in as Priya Raman after decisions were recorded, her dashboard shows the CI talk as Accepted and the AI talk as Rejected (or unambiguous equivalents of those statuses)"
@@ -305,6 +319,7 @@ rubric:
   - id: CFP-14
     criterion: "The platform can send (or queue) acceptance and rejection notification emails to decided submitters, with the UI confirming dispatch"
     weight: 2
+    type: side-effect
     testability: auto-partial
     scenarios: [CFP-S4]
     pass_criteria: "A notify/send-decisions action exists, accepts or provides accept/reject templates (merge-field support like {speaker_name}/{talk_title} is a plus, inferred), and after triggering it the UI reports the messages as sent/queued for the correct recipient sets; NOT auto-verified: actual delivery and body personalization"
@@ -313,6 +328,7 @@ rubric:
   - id: CFP-15
     criterion: "An accepted submission becomes available as a session in the sessions/agenda area with its metadata (title, speaker, track) intact, without re-entering the data"
     weight: 2
+    type: handoff
     testability: auto
     scenarios: [CFP-S4]
     pass_criteria: "After acceptance (plus an explicit convert/move action only if the UI requires one), the sessions/agenda area contains a session titled 'Taming 40-Minute CI: Incremental Builds at Monorepo Scale' with speaker Priya Raman and track 'Platform & Infra' carried over with no manual re-typing of those fields"
@@ -320,6 +336,7 @@ rubric:
   - id: CFP-16
     criterion: "Submission editing locks after the CFP close date: the speaker can no longer modify a submission once the call is closed"
     weight: 2
+    type: rule
     testability: auto
     scenarios: [CFP-S4]
     pass_criteria: "With the close date in the past, the speaker's submission opens read-only, hides its edit affordance, or shows an editing-closed message — and no edit can be saved"

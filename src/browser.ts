@@ -175,6 +175,14 @@ export class BrowserSession {
   > {
     const base = this.refCounter;
     const work = this.page.evaluate((baseCount) => {
+      // Clear refs from prior snapshots first. In an SPA, elements that
+      // survive navigation (sidebars, headers) keep their old attribute, so a
+      // stale ref would silently resolve to the WRONG element — e.g. clicking
+      // "Sign out" while intending something else. After clearing, a stale ref
+      // resolves to nothing and the tool returns a take-a-new-snapshot error.
+      Array.from(document.querySelectorAll("[data-sbek-ref]")).forEach((el) =>
+        el.removeAttribute("data-sbek-ref"),
+      );
       const selector =
         'a[href], button, input, select, textarea, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="checkbox"], [role="radio"], [role="combobox"], [contenteditable="true"], [onclick]';
       // Bound total elements EXAMINED, not just collected, so pathological
