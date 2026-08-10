@@ -6,17 +6,17 @@ Judging is **implementation-agnostic**: submissions do not need to look like Ses
 
 ## What gets evaluated
 
-**96 rubric items across 20 scenarios in 7 areas** — 84 items (178 weighted points) are required, 12 items (19 points) are extra credit. Each item is individually judged and cited; a scenario is just the browser agent's unit of work, so several rubric items typically share one scenario run.
+**98 rubric items across 20 scenarios in 7 areas** — 86 items (182 weighted points) are required, 12 items (19 points) are extra credit. Each item is individually judged and cited; a scenario is just the browser agent's unit of work, so several rubric items typically share one scenario run.
 
 | Area | Spec | Area weight | Scenarios | Rubric items | Item weight |
 |---|---|---:|---:|---:|---:|
-| Call for Papers | `specs/01-call-for-papers.yaml` | 20 | 4 | 16 | 34 |
+| Call for Papers (incl. multi-event support) | `specs/01-call-for-papers.yaml` | 20 | 4 | 18 | 38 |
 | Abstract Management (review depth & disposition) | `specs/02-abstract-management.yaml` | 20 | 3 | 14 | 28 |
 | Speaker Management (incl. speaker portal) | `specs/03-speaker-management.yaml` | 15 | 3 | 16 | 33 |
 | Content Management (files, versions, approvals) | `specs/04-content-management.yaml` | 15 | 3 | 14 | 31 |
 | AI Agenda Builder | `specs/05-ai-agenda.yaml` | 10 | 2 | 8 | 18 |
 | Public Widgets (sessions list, speakers list, agenda, itinerary, speaker gallery) | `specs/06-public-widgets.yaml` | 20 | 3 | 16 | 34 |
-| **Required total** | | **100** | **18** | **84** | **178** |
+| **Required total** | | **100** | **18** | **86** | **182** |
 | Speaker CRM | `specs/07-speaker-crm.yaml` | 10 | 2 | 12 | 19 |
 
 "Area weight" is each area's deliberate share of the overall score (required areas sum to 100) — set independently of how many rubric items the spec happens to contain, so a verbosely-specced area doesn't win more influence by accident. "Item weight" is the sum of each item's own 1/2/3 weight, used only *within* an area to rank its own items against each other.
@@ -26,13 +26,13 @@ Every item also carries a `type` — what *kind* of problem it probes, not which
 | Type | What it probes | Required weight | Share |
 |---|---|---:|---:|
 | `crud` | create or edit something and it persists | 41 | 23% |
-| `roundtrip` | what one role/screen wrote is what another role/screen reads | 33 | 19% |
-| `exists` | the capability/screen is present and reachable at all | 26 | 15% |
+| `roundtrip` | what one role/screen wrote is what another role/screen reads | 33 | 18% |
+| `exists` | the capability/screen is present and reachable at all | 28 | 15% |
 | `rule` | a stated constraint is actually enforced (deadline, conflict, filter, approval gate) | 22 | 12% |
-| `scoping` | a role sees exactly what it should, and nothing more | 18 | 10% |
+| `scoping` | a role sees exactly what it should, and nothing more, and one event's data stays out of another | 20 | 11% |
 | `depth` | differentiators and polish beyond the core loop | 13 | 7% |
 | `bulk` | operations at scale — CSV import, bulk email, ZIP export, auto-distribution | 11 | 6% |
-| `side-effect` | egress the browser can't observe — real email delivery, calendar files | 8 | 5% |
+| `side-effect` | egress the browser can't observe — real email delivery, calendar files | 8 | 4% |
 | `handoff` | data crosses a module boundary without re-entry (accepted → session → public) | 6 | 3% |
 
 `exists`/`crud` items are necessary but rarely discriminate — almost anything that ships passes them. `rule`/`scoping`/`handoff` are where clones actually fail (see [Calibration notes](#calibration-notes) below).
@@ -48,19 +48,19 @@ Feature documentation — what each area is supposed to do, the user journeys, a
 ## Quick start
 
 ```bash
-npm install                       # also downloads Playwright Chromium
+pnpm install                       # also downloads Playwright Chromium
 cp evalconfig.example.json evalconfig.json   # edit: set the submission URL + any seeded credentials
 
-npm run list                      # see areas / scenarios / rubric coverage
-npm run smoke                     # offline Playwright check, no API key needed
-npm run eval -- --url https://submission.example.com --dry-run   # validate specs, print the plan
-npm run eval -- --url https://submission.example.com             # full evaluation
+pnpm run list                      # see areas / scenarios / rubric coverage
+pnpm run smoke                     # offline Playwright check, no API key needed
+pnpm run eval -- --url https://submission.example.com --dry-run   # validate specs, print the plan
+pnpm run eval -- --url https://submission.example.com             # full evaluation
 ```
 
 Recommended grading config (cheap agent, strong judge — judge quality drives cross-submission fairness):
 
 ```bash
-npm run eval -- --url <url> --agent-model claude-sonnet-5 --judge-model claude-opus-5
+pnpm run eval -- --url <url> --agent-model claude-sonnet-5 --judge-model claude-opus-5
 ```
 
 Outputs land in `runs/<timestamp>/`:
@@ -75,7 +75,7 @@ Outputs land in `runs/<timestamp>/`:
 Many submissions gate speaker and reviewer accounts behind emailed magic links or OAuth. The browser agent has no inbox and cannot complete those flows. Sign in once by hand instead:
 
 ```bash
-npm run sbek -- auth --persona speaker    # opens a real browser window
+pnpm run sbek -- auth --persona speaker    # opens a real browser window
 ```
 
 Complete the login in **that** window (request the magic link, then paste the link into that window's address bar — a link opened in your own browser authenticates the wrong session). Press Enter and the kit saves the session to `.auth/<host>.<persona>.json`; every scenario for that persona then starts already signed in, and is told so, so it doesn't waste turns re-authenticating.
@@ -98,23 +98,23 @@ Plus-addressing gives each persona a distinct account on a single inbox, so a su
 Some rubric items can't be auto-verified (acceptance emails actually arriving, calendar exports opening in a calendar app, second-account visibility). The run emits `manual-checklist.md` with step-by-step instructions. Fill in `manual-results.json` (verdicts: `pass | partial | fail | not_found`), then:
 
 ```bash
-npm run finalize -- --run runs/<timestamp>
+pnpm run finalize -- --run runs/<timestamp>
 ```
 
 This rescores the report with your manual verdicts included. Items the agent was *blocked* from reaching (`cannot_judge`) also route to this queue, so a submission is never penalized for harness failures.
 
-`npm run sbek -- rescore --run <dir>` rebuilds `report.html`/`report.json` from a run's stored evidence and judgements with **no API calls** — useful after changing scoring logic, or to recover a report. Re-run `finalize` afterwards to re-apply manual verdicts.
+`pnpm run sbek -- rescore --run <dir>` rebuilds `report.html`/`report.json` from a run's stored evidence and judgements with **no API calls** — useful after changing scoring logic, or to recover a report. Re-run `finalize` afterwards to re-apply manual verdicts.
 
 ## Useful flags
 
 ```bash
-npm run eval -- --url <url> --areas call-for-papers,public-widgets   # subset of areas
-npm run eval -- --url <url> --scenarios CFP-S1,CFP-S2                # subset of scenarios
-npm run eval -- --url <url> --include-optional                       # also run speaker-crm
-npm run eval -- --url <url> --headed                                 # watch the browser
+pnpm run eval -- --url <url> --areas call-for-papers,public-widgets   # subset of areas
+pnpm run eval -- --url <url> --scenarios CFP-S1,CFP-S2                # subset of scenarios
+pnpm run eval -- --url <url> --include-optional                       # also run speaker-crm
+pnpm run eval -- --url <url> --headed                                 # watch the browser
 
 # Cheap pilot before a full run: one scenario, capped turns, small model
-npm run eval -- --url <url> --areas ai-agenda --scenarios AIA-S1 \
+pnpm run eval -- --url <url> --areas ai-agenda --scenarios AIA-S1 \
   --max-turns 18 --agent-model claude-haiku-4-5 --judge-model claude-haiku-4-5
 ```
 
@@ -139,7 +139,7 @@ Use the log file rather than the process's stdout — piping stdout through `tai
 **Resume instead of restarting:**
 
 ```bash
-npm run eval -- --resume runs/<ts> [--config <file>]
+pnpm run eval -- --resume runs/<ts> [--config <file>]
 ```
 
 Completed scenarios are reused from their `evidence.json` and fully-scored areas from `report.json`, with no browser and no API calls — you only pay for what didn't finish. Scenario evidence is written only on completion, so an interrupted scenario leaves no file and simply re-runs; there's no half-finished state to corrupt a resume. If the process dies, `run.log` ends with a `FATAL` line and the exact resume command.
@@ -151,7 +151,8 @@ This is also the cheap way to raise coverage after the fact: re-run with `--max-
 - **Areas chain, in order.** Scenarios build on state created by earlier areas against the same deployment (the CFP submissions become the reviewed abstracts, the accepted talks become the scheduled sessions, the published agenda feeds the public widgets). A full ordered run (01 → 07) is the intended mode; specs carry fallback steps ("if X doesn't exist yet, create it") so subset runs still work, but expect more seeding turns.
 - **Every scenario gets all provided credentials.** A scenario's `persona` is its *starting* identity; scripts may sign out and switch identities mid-scenario (e.g. organizer assigns a reviewer, then signs in as that reviewer).
 - **Failures degrade, never destroy.** `report.json`/`report.html` are rewritten after every area; a scenario or judge API failure records `agent_error`/`cannot_judge` (routed to the manual queue) and the run continues. A submission is never penalized for harness failures.
-- **Containment.** The browser session is pinned to the target origin: off-origin redirects are rolled back, off-origin popups closed, native dialogs auto-accepted (and reported to the agent). The agent never enters real personal data — all identities are fixtures.
+- **Containment.** The browser session is pinned to the target site: off-origin redirects are rolled back, off-origin popups closed, native dialogs auto-accepted (and reported to the agent). Sibling subdomains of the same registrable domain count as on-target — real products split across `app.` / `appv2.` / `admin.` hosts, and pinning to one exact origin strands the agent on a shell it can't leave. The agent never enters real personal data — all identities are fixtures.
+- **SPA-aware element detection.** Clickable targets are found by role/tag *and* by `cursor: pointer`, because React/Vue table rows and cards are usually plain `<div>`s with synthetic handlers — no `href`, no `<button>`, no `onclick` attribute. Without this the agent can be unable to open a record at all and the clone loses points for a screen that works fine.
 
 ## Scoring model
 
@@ -165,7 +166,7 @@ This is also the cheap way to raise coverage after the fact: re-run with `--max-
 - **Coverage** is reported alongside every score (area-weighted the same way): the share of total rubric weight that actually reached a verdict. Below **60% coverage the headline score is withheld entirely** and the report says "insufficient coverage" instead — a percentage computed over a fraction of the rubric is not comparable between submissions and reads far better than the evidence supports. Raise coverage by working the manual checklist, pre-authenticating personas, or re-running with more turns.
 - The judge must cite evidence (screenshot paths, observations, transcript turns) for every verdict, and independently reports **defects** it noticed even where no rubric item covers them.
 
-Edit specs freely — add an item, change a weight, retag a type — then run `npm run eval -- --url x --dry-run` to validate, or `npm run sbek -- rescore --run <dir>` to rescore an existing run's stored evidence against the new rubric with no API calls.
+Edit specs freely — add an item, change a weight, retag a type — then run `pnpm run eval -- --url x --dry-run` to validate, or `pnpm run sbek -- rescore --run <dir>` to rescore an existing run's stored evidence against the new rubric with no API calls.
 
 ### Calibration notes
 
@@ -183,7 +184,7 @@ specs/*.yaml ──► browser agent (Claude + Playwright, custom tool loop)
               LLM judge (fresh context, structured output, evidence-cited verdicts)
                     │
                     ▼
-        report.html / report.json  +  manual-checklist.md ──► npm run finalize
+        report.html / report.json  +  manual-checklist.md ──► pnpm run finalize
 ```
 
 Design choices worth knowing:

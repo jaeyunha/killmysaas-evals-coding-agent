@@ -185,8 +185,11 @@ rubric:
     testability: auto
     scenarios: [SPK-S1]
     pass_criteria: >-
-      Manual add-speaker flow accepts name, email, title, company, and bio; the saved record
-      displays them; and an organizer bio edit (sentinel SBEK-ORG-EDIT-01) survives a page
+      Manual add-speaker flow accepts at least name, email and bio, and the saved record
+      displays them; job title and company are accepted either on the same form OR on the
+      speaker's profile/detail view afterwards (SessionBoard itself only captures them on the
+      full profile, so requiring them on the quick-create form would penalise a faithful
+      implementation); and an organizer bio edit (sentinel SBEK-ORG-EDIT-01) survives a page
       reload.
     evidence: >-
       Screenshot of the filled add form, the saved record, and the record after reload showing

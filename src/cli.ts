@@ -13,7 +13,7 @@ import type { AreaScore, RunReport, ScenarioEvidence } from "./types.js";
 const HELP = `sbek — SessionBoard Eval Kit v${KIT_VERSION}
 
 Usage:
-  npm run sbek -- <command> [flags]
+  pnpm run sbek -- <command> [flags]
 
 Commands:
   list                         Show feature areas, scenarios, and rubric coverage
@@ -172,7 +172,7 @@ async function main() {
     log(
       `No saved session or credentials for: ${unauthed.join(", ")} — those scenarios will sign up themselves, or end 'blocked' if the app requires email verification.`,
     );
-    log(`  Tip: npm run sbek -- auth --persona <name>`);
+    log(`  Tip: pnpm run sbek -- auth --persona <name>`);
   }
 
   // Incremental persistence: after each area, write a partial report so a
@@ -195,8 +195,12 @@ async function main() {
 
     // Whole area already scored and unchanged? Reuse it — no browser, no API.
     const prior = priorAreas.get(spec.area);
+    // pct === null means nothing scored — a failed or refused judge call.
+    // Reusing that would bake a harness failure into the report, so re-judge
+    // it (evidence is on disk, so this costs one judge call, no browsing).
     const priorComplete =
       prior &&
+      prior.pct !== null &&
       spec.scenarios.every((sc) => fs.existsSync(path.join(runDir, sc.id, "evidence.json")));
     if (priorComplete) {
       log(`  reusing scored area from previous run (${prior!.pct ?? "n/a"}%)`);
@@ -299,6 +303,16 @@ async function main() {
     writeArtifacts();
   }
 
+  // Resuming with a narrower --areas selection must not delete areas the run
+  // already scored: carry forward any prior area this pass didn't cover.
+  for (const [area, prior] of priorAreas) {
+    if (!areaScores.some((a) => a.area === area)) {
+      log(`  carrying forward previously scored area: ${area} (${prior.pct ?? "n/a"}%)`);
+      areaScores.push(prior);
+    }
+  }
+  areaScores.sort((a, b) => a.area.localeCompare(b.area));
+
   const report = writeArtifacts();
   if (report.scoreWithheld) {
     log(
@@ -321,7 +335,7 @@ main().catch((err) => {
   // run directory already holds every completed scenario and area score.
   try {
     log(`FATAL: ${err?.message ?? String(err)}`);
-    log(`Resume with: npm run eval -- --resume <run dir> [--config <file>]`);
+    log(`Resume with: pnpm run eval -- --resume <run dir> [--config <file>]`);
     closeLog();
   } catch {}
   console.error(err?.stack ?? String(err));

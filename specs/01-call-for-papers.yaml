@@ -70,6 +70,16 @@ scenarios:
          "Key takeaway" and other required fields left empty. Screenshot the
          validation error. If the form requires creating an account before it can be
          filled, record that and leave validation testing to the speaker scenario.
+      12. MULTI-EVENT PROBE. Sign back in as the organizer and look for a way to run a
+         SECOND event alongside the first: an events list, an event switcher, a
+         "New event"/"Create event" control. If one exists, create a second event
+         named "Forward Summit 2028" and screenshot it listed alongside the first.
+         Then open the second event's submissions/abstracts area and screenshot it,
+         confirming whether it is empty (data scoped per event) or shows the first
+         event's submissions (data leaking across events). If NO way to create or
+         switch events exists, record an explicit observation naming every place you
+         looked and stating that the app appears to be single-event — do not skip
+         this step silently.
     success_signals:
       - Builder screenshot shows "Key takeaway" (required) and "Audience level" dropdown
       - Public portal loads logged-out with event name and a visible deadline
@@ -226,7 +236,7 @@ rubric:
     type: depth
     testability: auto
     scenarios: [CFP-S1, CFP-S2]
-    pass_criteria: "The 'Workshop prerequisites' field is visible when format 'Workshop (120 min)' is selected and hidden when 'Talk (30 min)' is selected — visibility follows the controlling answer in both directions"
+    pass_criteria: "A field configured to depend on the session format appears for the workshop-style format and disappears for the talk-style format — visibility follows the controlling answer in both directions. The app's own format vocabulary counts (e.g. 'Workshop' / 'Break Out'); the fixture's duration-labelled names are illustrative, not required"
     evidence: "Two public-form screenshots, one per format selection, showing the dependent field present then absent (from CFP-S1 logged-out, or CFP-S2 as the speaker if the form requires an account first); builder screenshot of the show-when configuration if the UI exposes one"
   - id: CFP-03
     criterion: "A public CFP portal is reachable without any login and shows event branding/name, the submission deadline, and the configured tracks and formats as selectable options"
@@ -341,3 +351,20 @@ rubric:
     scenarios: [CFP-S4]
     pass_criteria: "With the close date in the past, the speaker's submission opens read-only, hides its edit affordance, or shows an editing-closed message — and no edit can be saved"
     evidence: "Speaker-side screenshot of the locked/read-only submission (or editing-closed message), taken after the close date was moved to the past — contrast with the successful edit in CFP-S2"
+  - id: CFP-17
+    criterion: "The app supports more than one event: an organizer can create a second event and both events coexist, each reachable via an events list or event switcher"
+    weight: 2
+    type: exists
+    testability: auto
+    scenarios: [CFP-S1]
+    pass_criteria: "A second event ('Forward Summit 2028') is created and both events appear together in an events list or switcher. A single-event app with no event-creation or switching UI anywhere fails this item — an agent observation naming the places checked is sufficient evidence of absence"
+    evidence: "Screenshot of the events list or switcher showing both events; or the agent's explicit observation that no event creation/switching UI exists, listing where it looked"
+  - id: CFP-18
+    criterion: "Event data is scoped per event: submissions, sessions and speakers belonging to one event do not appear inside another event"
+    weight: 2
+    type: scoping
+    testability: auto
+    scenarios: [CFP-S1]
+    pass_criteria: "The second event's submissions/abstracts area is empty (or contains only its own records) rather than showing the first event's submissions. Cross-event leakage of records is a fail"
+    evidence: "Screenshot of the second event's submissions/abstracts list contrasted with the first event's populated list"
+    manual_instructions: "Only if the agent could not create a second event but the app does support multiple events: create two events by hand, add a submission to one, and confirm it is not visible from the other."

@@ -35,7 +35,8 @@ const TOOLS: Anthropic.ToolUnion[] = [
   },
   {
     name: "fill",
-    description: "Clear and type text into an input, textarea, or contenteditable identified by ref.",
+    description:
+      "Clear and type text into an input, textarea, or rich-text editor identified by ref. Date/time fields accept human wording ('March 5, 2026', '9:30 AM') — they are converted to the format the field requires. A field marked 'readonly' cannot be typed into: filling it clicks it instead, which usually opens a picker, and the result is a fresh snapshot listing the picker's options.",
     input_schema: {
       type: "object",
       properties: { ref: { type: "string" }, text: { type: "string" } },
@@ -44,7 +45,8 @@ const TOOLS: Anthropic.ToolUnion[] = [
   },
   {
     name: "select",
-    description: "Choose an option in a <select> element by visible label (falls back to value).",
+    description:
+      "Choose an option in a dropdown by visible label. Works for a native <select> AND for custom dropdowns/comboboxes (refs marked 'dropdown', or any div/button that opens a list) — it opens the control, types to filter if needed, and clicks the matching option. If the value does not match, the error lists the options that were actually available.",
     input_schema: {
       type: "object",
       properties: { ref: { type: "string" }, value: { type: "string" } },
@@ -88,10 +90,17 @@ const TOOLS: Anthropic.ToolUnion[] = [
   },
   {
     name: "scroll",
-    description: "Scroll the page up or down by roughly one viewport.",
+    description:
+      "Scroll up or down by roughly one viewport. Pass ref to scroll a specific list instead of the page — long session/speaker/submission lists often live in their own scroll box (refs marked 'scrollable') or load more rows only when that box is scrolled, so a short-looking list is usually not a short list.",
     input_schema: {
       type: "object",
-      properties: { direction: { type: "string", enum: ["up", "down"] } },
+      properties: {
+        direction: { type: "string", enum: ["up", "down"] },
+        ref: {
+          type: "string",
+          description: "Optional: a ref inside the list/container to scroll instead of the whole page",
+        },
+      },
       required: ["direction"],
     },
   },
@@ -152,8 +161,11 @@ function agentSystemPrompt(targetUrl: string, config: EvalConfig): string {
 Ground rules:
 - Stay on ${origin} (and its subpaths). Never navigate to other sites. Never enter real personal data, payment details, or credentials other than the test values you are given.
 - The implementation will NOT look like SessionBoard. Judge by function, not appearance. Hunt for equivalent features under different names (e.g. "Call for Papers" might be "Submissions", "Apply to speak", "CFP").
+- READ THE SNAPSHOT LITERALLY. It lists everything you can act on, including controls inside embedded iframes (marked "in iframe …") and web components. When a modal dialog is open the list shows ONLY that dialog — close or save it to reach the page behind. A ref marked "scrollable" is a list with its own scrollbar: scroll it with that ref, because the page scrollbar will not move it and the list is probably longer than it looks. If a click reports that something is covering the target, dismiss that overlay and retry rather than concluding the control is broken — and if a tool reports a capability could not be exercised, that is evidence to record, not something to retry indefinitely.
+- MULTI-STEP WIZARDS ARE GATED: in stepped flows (Overview → Rounds → Evaluators → Assignments; Abstract → Participant → Payments → Form Settings) the later steps stay 'disabled' until you advance through the earlier ones, so press Next/Continue/Save to unlock a step instead of concluding it is missing.
 - Be persistent but bounded: if a path fails, try one or two plausible alternatives (nav menus, footer links, obvious URLs like /cfp, /speakers, /agenda, /admin, /dashboard) before concluding 'feature_not_found' or 'blocked'.
 - ADAPT THE SCRIPT TO THE APP, BUT NEVER HIDE A MISSING CAPABILITY. The scenario's sample *values* (person names, talk titles, dates) are a convenience — if the app signs you in as a fixed demo identity or is pre-seeded, exercise the same capability against the data that exists and note what stood in for what. But when the app cannot do something the script asks for, that is a FINDING about the product, not a data mismatch to paper over: record an explicit observation naming the missing capability and what you tried, then continue with existing data so the rest of the scenario still produces evidence.
+- The sample data's FORMAT and TRACK names (e.g. "Talk (30 min)", "Lightning Talk (10 min)") are illustrative. If the app offers its own vocabulary (Keynote / Break Out / Workshop, or its own track list), pick the closest equivalent, note the substitution, and carry on — an app is not deficient for naming formats differently.
 - Multi-event support is graded. If you cannot create a second event, or the app has no event-creation UI or event switcher at all, say so explicitly in an observation ("no event creation UI found at X, Y, Z; the app appears to be single-event") — do not silently reuse the seeded event as though the step succeeded.
 - Reserve 'blocked' for when the capability itself is unreachable (a hard auth wall you cannot pass, a crash, a flow that does not exist), not for a mismatch between the script's sample data and the app's seeded data.
 - Budget your turns. You have a limited number; spend them on evidence for the rubric, not on exhaustive URL guessing. If something is not discoverable after a few tries, record that as an observation (it is a real finding about the product) and move on to the next step.
@@ -388,7 +400,10 @@ export async function runScenario(opts: {
               content = await browser.press(String(input.key));
               break;
             case "scroll":
-              content = await browser.scroll(input.direction === "up" ? "up" : "down");
+              content = await browser.scroll(
+                input.direction === "up" ? "up" : "down",
+                input.ref ? String(input.ref) : undefined,
+              );
               break;
             case "wait":
               content = await browser.wait(Number(input.ms) || 1000);
@@ -448,7 +463,11 @@ export async function runScenario(opts: {
         if (AUTO_SHOT_TOOLS.has(tu.name) && !isError) {
           try {
             const url = browser.page?.url();
-            if (url && url !== lastShotUrl) {
+            // Don't spend the judge's image budget on 404s from URL probing —
+            // a failed guess is worth an observation, not a screenshot.
+            const title = typeof content === "string" ? (content.match(/^TITLE: (.*)$/m)?.[1] ?? "") : "";
+            const isErrorPage = /404|not found|could not be found/i.test(title);
+            if (url && url !== lastShotUrl && !isErrorPage) {
               lastShotUrl = url;
               const slug = url.replace(/^https?:\/\/[^/]+/, "").replace(/[^a-z0-9]+/gi, "-") || "root";
               const shot = await browser.screenshot(`auto${slug}`.slice(0, 55), false);

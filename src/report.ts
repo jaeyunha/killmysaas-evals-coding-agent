@@ -193,7 +193,7 @@ export function writeManualChecklist(runDir: string, specs: Spec[], report: RunR
     ``,
     `These rubric items could not be verified automatically (or only half-verified).`,
     `For each item: perform the check, then record the result in \`manual-results.json\``,
-    `and run \`npm run finalize -- --run ${runDir}\` to fold it into the final score.`,
+    `and run \`pnpm run finalize -- --run ${runDir}\` to fold it into the final score.`,
     ``,
   ];
   const template: Record<string, { verdict: string; notes: string }> = {};

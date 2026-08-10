@@ -5,3 +5,4 @@ evalconfig.json
 .env
 .auth/
 evalconfig.*.json
+runs-setup/
