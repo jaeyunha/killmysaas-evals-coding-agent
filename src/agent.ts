@@ -159,7 +159,7 @@ function agentSystemPrompt(targetUrl: string, config: EvalConfig): string {
   return `You are a QA browser agent evaluating a web application that claims to implement SessionBoard-like functionality (event call-for-papers / speaker & session management). You execute one test scenario at a time by driving a real browser through tools.
 
 Ground rules:
-- Stay on ${origin} (and its subpaths). Never navigate to other sites. Never enter real personal data, payment details, or credentials other than the test values you are given.
+- Stay on ${origin}, its subpaths, and sibling subdomains of the same site (a product's public pages often live on a different subdomain than its admin app). Never navigate to a different site. Never enter real personal data, payment details, or credentials other than the test values you are given.
 - The implementation will NOT look like SessionBoard. Judge by function, not appearance. Hunt for equivalent features under different names (e.g. "Call for Papers" might be "Submissions", "Apply to speak", "CFP").
 - READ THE SNAPSHOT LITERALLY. It lists everything you can act on, including controls inside embedded iframes (marked "in iframe …") and web components. When a modal dialog is open the list shows ONLY that dialog — close or save it to reach the page behind. A ref marked "scrollable" is a list with its own scrollbar: scroll it with that ref, because the page scrollbar will not move it and the list is probably longer than it looks. If a click reports that something is covering the target, dismiss that overlay and retry rather than concluding the control is broken — and if a tool reports a capability could not be exercised, that is evidence to record, not something to retry indefinitely.
 - MULTI-STEP WIZARDS ARE GATED: in stepped flows (Overview → Rounds → Evaluators → Assignments; Abstract → Participant → Payments → Form Settings) the later steps stay 'disabled' until you advance through the earlier ones, so press Next/Continue/Save to unlock a step instead of concluding it is missing.
@@ -234,6 +234,8 @@ export async function runScenario(opts: {
   let finalUrl: string | undefined;
   let started = false;
   let lastShotUrl: string | undefined;
+  // Consecutive turns that ended on a login wall while we began authenticated.
+  let loggedOutStreak = 0;
   let turn = 0;
 
   const messages: Anthropic.MessageParam[] = [
@@ -358,8 +360,12 @@ export async function runScenario(opts: {
           switch (tu.name) {
             case "navigate": {
               const target = new URL(String(input.url), config.url);
-              if (target.origin !== new URL(config.url).origin) {
-                content = `ERROR: ${target.origin} is off-target. Stay on ${new URL(config.url).origin}.`;
+              // Use the session's own containment rule — an exact-origin check
+              // here would reject sibling subdomains that the browser layer
+              // allows (e.g. a public site on sites.example.com), silently
+              // making a whole product surface unreachable.
+              if (!browser.isAllowedUrl(target.toString())) {
+                content = `ERROR: ${target.origin} is off-target. Stay on ${new URL(config.url).origin} or a sibling subdomain of the same site.`;
                 isError = true;
               } else {
                 content = await browser.navigate(target.toString());
@@ -456,6 +462,28 @@ export async function runScenario(opts: {
               ? clip(content, 500)
               : `(screenshot returned: ${screenshots.at(-1)?.path ?? ""})`,
         });
+
+        // Session-health guard. A pre-authenticated run that lands on a login
+        // wall has lost its session (shared-domain cookies, idle timeout, an
+        // impersonation switch). Continuing means exploring a logged-out app
+        // and reporting real features as missing, so stop and say why.
+        if (preAuthed && !isError) {
+          const url = browser.page?.url() ?? "";
+          const wall =
+            /[?&/](login|signin|sign-in)\b/i.test(url) || /reason=sessionExpired/i.test(url);
+          loggedOutStreak = wall ? loggedOutStreak + 1 : 0;
+          if (loggedOutStreak >= 2) {
+            outcome = "blocked";
+            summary =
+              `Session lost mid-scenario: this run started pre-authenticated but the app redirected to a login wall (${url.slice(0, 140)}) and stayed there. ` +
+              `Everything after this point would be observed while logged out, so the scenario was stopped rather than reporting features as missing. ` +
+              `Re-capture the persona's session (sbek auth) and re-run this scenario.`;
+            observations.push(`SESSION LOST: redirected to ${url.slice(0, 160)} while pre-authenticated.`);
+            transcript.push({ turn, kind: "assistant_text", detail: "(halted: session lost)" });
+            finished = true;
+            break;
+          }
+        }
 
         // Auto-capture evidence whenever an action lands on a new page. These
         // are saved for the judge but NOT returned to the model, so richer

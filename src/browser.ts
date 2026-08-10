@@ -185,6 +185,11 @@ export class BrowserSession {
    * pinning to one exact origin strands the agent on a shell it cannot leave.
    * Anything on a different registrable domain is still refused.
    */
+  /** Public form of the containment rule, so callers don't re-implement it. */
+  isAllowedUrl(url: string): boolean {
+    return this.isOnTarget(url);
+  }
+
   private isOnTarget(url: string): boolean {
     if (url === "about:blank" || url.startsWith("data:")) return true;
     try {
