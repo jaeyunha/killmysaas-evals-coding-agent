@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "sbek": {
+      "command": "npx",
+      "args": ["--no-install", "tsx", "src/mcp.ts"],
+      "env": {}
+    }
+  }
+}

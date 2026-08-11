@@ -6,3 +6,4 @@ evalconfig.json
 .auth/
 evalconfig.*.json
 runs-setup/
+.sbek-current-run

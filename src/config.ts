@@ -19,6 +19,9 @@ export interface CliArgs {
 }
 
 export function parseArgs(argv: string[]): CliArgs {
+  // pnpm 10 forwards the `--` in `pnpm run sbek -- <cmd>` through to argv, so
+  // drop a leading bare separator before reading the command.
+  while (argv[0] === "--") argv = argv.slice(1);
   const [command = "help", ...rest] = argv;
   const flags: Record<string, string | boolean> = {};
   for (let i = 0; i < rest.length; i++) {

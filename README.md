@@ -39,10 +39,23 @@ Every item also carries a `type` — what *kind* of problem it probes, not which
 
 Feature documentation — what each area is supposed to do, the user journeys, and how screens should look when filled with data — lives in [`docs/`](docs/). Rubric IDs in the report trace back to these docs.
 
+## Two ways to run it
+
+The kit has one set of specs, one browser layer, one scoring model, and **two drive paths**. Both write the same run directory, so a report cannot tell which produced it.
+
+| | **API path** (`sbek run`) | **Harness path** (inside Claude Code / Codex) |
+|---|---|---|
+| Who browses | a Claude agent the kit spawns via the API | **you** — the agent already in your session |
+| Who judges | a second API call per area | you, in a fresh session or a subagent |
+| Needs | `ANTHROPIC_API_KEY`, ~$2–10/run | no API key, no per-run cost |
+| Good for | unattended batch grading | interactive grading, debugging a submission, no-key environments |
+
+The [harness path](#running-it-from-inside-claude-code--codex) is below the API quick start.
+
 ## Requirements
 
 - Node.js 20+
-- `ANTHROPIC_API_KEY` in the environment (or an `ant auth login` profile)
+- `ANTHROPIC_API_KEY` in the environment (or an `ant auth login` profile) — **API path only**
 - ~$2–10 of API usage per full run depending on how far the agent gets (models default to `claude-opus-5`)
 
 ## Quick start
@@ -104,6 +117,36 @@ pnpm run finalize -- --run runs/<timestamp>
 This rescores the report with your manual verdicts included. Items the agent was *blocked* from reaching (`cannot_judge`) also route to this queue, so a submission is never penalized for harness failures.
 
 `pnpm run sbek -- rescore --run <dir>` rebuilds `report.html`/`report.json` from a run's stored evidence and judgements with **no API calls** — useful after changing scoring logic, or to recover a report. Re-run `finalize` afterwards to re-apply manual verdicts.
+
+## Running it from inside Claude Code / Codex
+
+No API key, no `sbek run`, no subprocesses. The agent in your session drives the browser itself through an MCP server, then judges the evidence it left on disk.
+
+```bash
+pnpm install
+cp evalconfig.example.json evalconfig.json   # set the submission URL
+pnpm run sbek -- auth --persona organizer    # optional but recommended, per persona
+```
+
+Then, in the session:
+
+```bash
+pnpm run sbek -- plan --url https://submission.example.com
+```
+
+That creates `runs/<timestamp>/`, remembers it in `.sbek-current-run`, and prints the scenario checklist. From there:
+
+1. **Browse.** Call `start_scenario({ scenario_id: "CFP-S1" })` on the `sbek` MCP server. It opens Chromium, restores that persona's saved session, and returns the full brief — the same ground rules and script the API agent gets. Drive with `snapshot` / `click` / `fill` / `select` / `scroll` / `press` / `upload`, capture `screenshot` and `observe` as you go, and finish with `done({ outcome, summary })`, which writes `evidence.json` and closes the browser. Repeat until `plan` shows every scenario `[done]`.
+
+2. **Judge**, one area at a time: `pnpm run sbek -- judge-brief --area call-for-papers` prints the rubric, the rendered evidence, and the absolute paths of the selected screenshots. Read those images, then write `runs/<timestamp>/judgements/<area>.json`. **Do this in a fresh session or a subagent** — an agent that just browsed the app knows what it *meant* to accomplish, and that is precisely the bias the judge must not carry.
+
+3. **Score:** `pnpm run sbek -- score` validates every judgement against the schema and writes `report.json`, `report.html`, and `manual-checklist.md`. Unjudged areas count as `cannot_judge` rather than disappearing, so coverage stays honest; `finalize` folds in manual verdicts exactly as on the API path.
+
+The workflow ships as two agent skills in `.agents/skills/` — `sbek-browse` (gather evidence) and `sbek-judge` (judge and score) — plus [`AGENTS.md`](AGENTS.md) for agents that read instructions from a file rather than skills. `.claude/skills/` symlinks to `.agents/skills/` so Claude Code finds them without a duplicate copy.
+
+The MCP server is `npx --no-install tsx src/mcp.ts` over stdio, run with this repo as the working directory; `.mcp.json` has it in the standard format.
+
+The MCP server enforces the same guardrails as the API path — off-origin navigation is refused, screenshots are captured automatically on every URL change, and a pre-authenticated scenario that hits a login wall twice is halted as `blocked` rather than reporting real features as missing.
 
 ## Useful flags
 

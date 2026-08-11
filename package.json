@@ -11,6 +11,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "sbek": "tsx src/cli.ts",
+    "mcp": "tsx src/mcp.ts",
+    "plan": "tsx src/cli.ts plan",
+    "judge-brief": "tsx src/cli.ts judge-brief",
+    "score": "tsx src/cli.ts score",
     "smoke": "tsx scripts/browser-smoke.mts",
     "setup:sessionboard": "tsx scripts/setup-sessionboard.mts",
     "list": "tsx src/cli.ts list",
@@ -20,6 +24,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
     "playwright": "^1.50.0",
     "yaml": "^2.6.0",
     "zod": "^3.24.0"

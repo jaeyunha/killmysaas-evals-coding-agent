@@ -8,6 +8,15 @@ import { initLog, log, closeLog } from "./log.js";
 import { runScenario } from "./agent.js";
 import { judgeArea } from "./judge.js";
 import { buildReport, scoreArea, writeHtmlReport, writeManualChecklist, finalizeReport } from "./report.js";
+import {
+  evidencePath,
+  judgementPath,
+  loadAreaEvidence,
+  renderEvidence,
+  selectScreenshots,
+} from "./evidence.js";
+import { JUDGE_SYSTEM, JudgementSchema, renderRubric } from "./judgement.js";
+import { CURRENT_RUN_FILE, resolveRunDir, writeCurrentRun } from "./runstate.js";
 import type { AreaScore, RunReport, ScenarioEvidence } from "./types.js";
 
 const HELP = `sbek — SessionBoard Eval Kit v${KIT_VERSION}
@@ -35,12 +44,27 @@ Commands:
                                --click "<text>" completes a one-click demo login with no
                                human step (headless); omit it for a hands-on login.
                                Personas: organizer | speaker | reviewer | attendee
+
+Run it yourself, inside Claude Code / Codex (no API key, no 'run' command).
+The agent already in your session does the browsing and the judging:
+  plan --url <url>             Start a run and print the scenario checklist
+      [--areas a,b,c] [--scenarios ID,ID] [--include-optional] [--run <dir>]
+                               Then drive the browser via the 'sbek' MCP server:
+                               start_scenario -> snapshot/click/fill/... -> done
+  judge-brief --area <slug>    Print the rubric + evidence + screenshot paths for
+      [--run <dir>]            one area, and where to write judgements/<area>.json.
+                               Run this in a FRESH session so browsing context
+                               cannot bias the verdicts.
+  score [--run <dir>]          Validate judgements/*.json and build the report
+      [--areas a,b,c]
+
   rescore --run <dir>          Rebuild report.html/json from a run's stored evidence
                                and judgements (no API calls). Re-run finalize after.
   finalize --run <dir>         Merge manual-results.json into the report and rescore
 
 Environment:
-  ANTHROPIC_API_KEY            required for 'run' (not for --dry-run / list / finalize)
+  ANTHROPIC_API_KEY            required for 'run' only — the harness path
+                               (plan / judge-brief / score) never calls the API
 `;
 
 async function main() {
@@ -115,6 +139,212 @@ async function main() {
     const specs = loadSpecs();
     const report = finalizeReport(runDir, specs);
     console.log(`Finalized. Overall: ${report.overallPct ?? "n/a"}%  (${report.manualPending} manual item(s) still pending)`);
+    return;
+  }
+
+  // --- harness path -------------------------------------------------------
+  // plan → (MCP browsing) → judge-brief → score. No API calls in any of them:
+  // the model doing the work is the one already running in Claude Code / Codex.
+
+  if (args.command === "plan") {
+    const config = loadConfig(args);
+    const specs = selectSpecs(loadSpecs(), config.areas, Boolean(config.includeOptional));
+    const runDir = typeof args.flags.run === "string" ? args.flags.run : newRunDir();
+    fs.mkdirSync(runDir, { recursive: true });
+    writeCurrentRun(runDir);
+
+    const wanted = config.scenarios?.length ? new Set(config.scenarios) : null;
+    const rows = specs.flatMap((s) =>
+      s.scenarios
+        .filter((sc) => !wanted || wanted.has(sc.id))
+        .map((sc) => ({ spec: s, sc, done: fs.existsSync(evidencePath(runDir, sc.id)) })),
+    );
+
+    console.log(`Run directory: ${runDir}   (remembered in ${CURRENT_RUN_FILE})`);
+    console.log(`Target: ${config.url}\n`);
+
+    const personas = [...new Set(rows.map((r) => r.sc.persona))];
+    const preAuthed = personas.filter((p) => hasAuthState(p, config.url));
+    if (preAuthed.length) console.log(`Pre-authenticated personas: ${preAuthed.join(", ")}`);
+    const unauthed = personas.filter((p) => !preAuthed.includes(p) && !config.credentials?.[p]);
+    if (unauthed.length) {
+      console.log(
+        `No saved session or credentials for: ${unauthed.join(", ")}\n  Those scenarios must sign themselves up. Better: pnpm run sbek -- auth --persona <name>`,
+      );
+    }
+
+    let area = "";
+    for (const r of rows) {
+      if (r.spec.area !== area) {
+        area = r.spec.area;
+        console.log(`\n${r.spec.title} (${area})`);
+      }
+      console.log(
+        `  ${r.done ? "[done]" : "[    ]"} ${r.sc.id.padEnd(8)} ${r.sc.name} [${r.sc.persona}]`,
+      );
+    }
+
+    const next = rows.find((r) => !r.done);
+    console.log(
+      [
+        ``,
+        `${rows.filter((r) => r.done).length}/${rows.length} scenarios have evidence.`,
+        ``,
+        `Next, in this session:`,
+        next
+          ? `  1. start_scenario({ scenario_id: "${next.sc.id}" })  — the sbek MCP server returns the full brief`
+          : `  1. (all scenarios have evidence)`,
+        `  2. Drive the browser with snapshot/click/fill/... , screenshot every meaningful state,`,
+        `     record observations, and finish with done({ outcome, summary }).`,
+        `  3. Repeat until every scenario is [done], then judge each area — in a FRESH`,
+        `     session or subagent, so browsing context cannot bias the verdicts:`,
+        `       pnpm run sbek -- judge-brief --area <area>`,
+        `  4. pnpm run sbek -- score`,
+      ].join("\n"),
+    );
+    return;
+  }
+
+  if (args.command === "judge-brief") {
+    const runDir = resolveRunDir(typeof args.flags.run === "string" ? args.flags.run : undefined);
+    const areaSlug = String(args.flags.area ?? "");
+    const specs = loadSpecs();
+    if (!areaSlug) {
+      console.log(
+        `judge-brief requires --area <slug>. Areas: ${specs.map((s) => s.area).join(", ")}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const spec = specs.find((s) => s.area === areaSlug);
+    if (!spec) throw new Error(`Unknown area "${areaSlug}"`);
+
+    const evidence = loadAreaEvidence(runDir, spec);
+    const shots = selectScreenshots(evidence, runDir);
+    const attached = new Set(shots.map((s) => s.label));
+    const autoItems = spec.rubric.filter((r) => r.testability !== "manual");
+    const out = judgementPath(runDir, spec.area);
+    fs.mkdirSync(path.dirname(out), { recursive: true }); // so a plain redirect works
+
+    console.log(
+      [
+        JUDGE_SYSTEM,
+        ``,
+        `=== FEATURE AREA: ${spec.title} (${spec.area}) ===`,
+        ``,
+        `RUBRIC — return a verdict for every item below, in this order:`,
+        renderRubric(autoItems),
+        ``,
+        `=== EVIDENCE ===`,
+        renderEvidence(evidence, attached),
+        ``,
+        `=== SCREENSHOTS TO READ (${shots.length}) ===`,
+        `Read every one of these image files before judging — they are the primary evidence;`,
+        `the transcript only says what was attempted, not what actually rendered.`,
+        ...shots.map((s) => `  ${s.abs}`),
+        ``,
+        `=== WRITE YOUR JUDGEMENT ===`,
+        `Write JSON to: ${out}`,
+        `Shape:`,
+        `{`,
+        `  "items": [{ "id": "<rubric id>", "verdict": "pass|partial|fail|not_found|cannot_judge",`,
+        `              "confidence": "high|medium|low", "reasoning": "...",`,
+        `              "evidence_refs": ["${spec.scenarios[0]?.id ?? "SCN"}/screenshots/003-x.jpg", "obs: ...", "turn 12"] }],`,
+        `  "defects": [{ "severity": "critical|major|minor", "description": "...", "where": "..." }],`,
+        `  "area_notes": "..."`,
+        `}`,
+        `Then run: pnpm run sbek -- score`,
+      ].join("\n"),
+    );
+    return;
+  }
+
+  if (args.command === "score") {
+    const runDir = resolveRunDir(typeof args.flags.run === "string" ? args.flags.run : undefined);
+    const config = loadConfig(args);
+    const specs = selectSpecs(loadSpecs(), config.areas, Boolean(config.includeOptional));
+    const areaScores: AreaScore[] = [];
+
+    for (const spec of specs) {
+      const evidence = loadAreaEvidence(runDir, spec);
+      const file = judgementPath(runDir, spec.area);
+      const autoItems = spec.rubric.filter((r) => r.testability !== "manual");
+
+      if (!fs.existsSync(file)) {
+        // Unjudged areas score cannot_judge rather than being dropped, so the
+        // coverage number tells the truth about how much of the rubric was seen.
+        console.log(`  ${spec.area}: no judgement yet (${file}) — items count as cannot_judge`);
+        areaScores.push(
+          scoreArea(
+            spec,
+            {
+              area: spec.area,
+              items: autoItems.map((r) => ({
+                id: r.id,
+                verdict: "cannot_judge" as const,
+                confidence: "low" as const,
+                reasoning: `Not judged yet. Run: pnpm run sbek -- judge-brief --area ${spec.area}`,
+                evidence_refs: [],
+              })),
+              defects: [],
+              area_notes: "Not judged yet.",
+            },
+            evidence,
+          ),
+        );
+        continue;
+      }
+
+      const parsed = JudgementSchema.safeParse(JSON.parse(fs.readFileSync(file, "utf8")));
+      if (!parsed.success) {
+        throw new Error(
+          `${file} does not match the judgement schema:\n${parsed.error.issues.map((i) => `  ${i.path.join(".")}: ${i.message}`).join("\n")}`,
+        );
+      }
+      const known = new Set(autoItems.map((r) => r.id));
+      const unknown = parsed.data.items.filter((i) => !known.has(i.id)).map((i) => i.id);
+      if (unknown.length) {
+        throw new Error(
+          `${file} scores rubric items that do not exist in ${spec.area}: ${unknown.join(", ")}`,
+        );
+      }
+      const missing = autoItems.filter((r) => !parsed.data.items.some((i) => i.id === r.id));
+      if (missing.length) {
+        console.log(
+          `  ${spec.area}: judgement omits ${missing.map((m) => m.id).join(", ")} — those count as cannot_judge`,
+        );
+      }
+      const score = scoreArea(spec, { area: spec.area, ...parsed.data }, evidence);
+      console.log(
+        `  ${spec.area}: ${score.pct ?? "n/a"}% over ${score.coveragePct}% coverage  manual pending: ${score.pendingManual.length}  defects: ${score.defects.length}`,
+      );
+      areaScores.push(score);
+    }
+
+    const report = buildReport({
+      targetUrl: config.url,
+      startedAt: areaScores.length
+        ? (loadAreaEvidence(runDir, specs[0])[0]?.startedAt ?? new Date().toISOString())
+        : new Date().toISOString(),
+      models: { agent: "harness (in-session agent)", judge: "harness (in-session judge)" },
+      areas: areaScores,
+    });
+    fs.writeFileSync(path.join(runDir, "report.json"), JSON.stringify(report, null, 2));
+    writeHtmlReport(runDir, report);
+    writeManualChecklist(runDir, specs, report);
+
+    if (report.scoreWithheld) {
+      console.log(
+        `\nSCORE WITHHELD — only ${report.overallCoveragePct}% of rubric weight was judged (need ${MIN_COVERAGE_PCT}%).` +
+          `\n  Provisional over the judged subset only: ${report.overallPct ?? "n/a"}% — not comparable across submissions.`,
+      );
+    } else {
+      console.log(
+        `\nOverall: ${report.overallPct ?? "n/a"}%  (coverage: ${report.overallCoveragePct}% of rubric weight judged)`,
+      );
+    }
+    console.log(`Report:  ${path.join(runDir, "report.html")}`);
+    console.log(`Manual:  ${path.join(runDir, "manual-checklist.md")} (${report.manualPending} item(s))`);
     return;
   }
 
