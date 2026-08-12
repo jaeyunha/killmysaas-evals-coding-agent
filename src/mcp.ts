@@ -154,7 +154,7 @@ async function startScenario(input: Record<string, any>): Promise<CallToolResult
       ``,
       `--- ---`,
       `Evidence directory: ${evidenceDir}`,
-      `Suggested budget: ~${cfg.maxTurnsPerScenario ?? 70} tool calls. Screenshot every meaningful state; record observations liberally; finish with done(...).`,
+      `Budget: ${turnBudget(cfg)} tool calls, enforced — past it only observe / screenshot / done are accepted, so land the scenario before then. Screenshot every meaningful state; record observations liberally; finish with done(...).`,
     ].join("\n"),
   );
 }
@@ -213,12 +213,39 @@ async function finishScenario(
 // Browser tool dispatch
 // ---------------------------------------------------------------------------
 
+/**
+ * How many tool calls one scenario gets. Matches the API path's default so the
+ * two drive paths cost the same; every turn re-sends the whole conversation, so
+ * this number is the single biggest lever on what a run costs.
+ */
+function turnBudget(cfg: ReturnType<typeof config>): number {
+  return cfg.maxTurnsPerScenario ?? 40;
+}
+
+/** Tools that still work after the budget runs out, because they end or record. */
+const CLOSING_TOOLS = new Set(["observe", "screenshot", "done", "abort_scenario"]);
+
 async function dispatch(name: string, input: Record<string, any>): Promise<CallToolResult> {
   if (!session) {
     return text(`ERROR: no scenario open. Call start_scenario first.`, true);
   }
   const s = session;
   const cfg = config();
+
+  // The budget used to be advice, and advice is free to ignore — scenarios ran
+  // until the model felt done, which is where the cost went. Browsing stops at
+  // the limit; recording and finishing stay open so the evidence gathered so
+  // far is still written instead of thrown away.
+  const budget = turnBudget(cfg);
+  if (s.turn >= budget && !CLOSING_TOOLS.has(name)) {
+    return text(
+      `ERROR: turn budget exhausted (${s.turn}/${budget} tool calls). No further browsing. ` +
+        `Record what you already saw with observe(...) / screenshot(...), then call done({ outcome, summary }) — ` +
+        `use "blocked" if you never reached the capability, and say in the summary that you ran out of budget.`,
+      true,
+    );
+  }
+
   s.turn += 1;
   s.transcript.push({
     turn: s.turn,
@@ -373,6 +400,13 @@ async function dispatch(name: string, input: Record<string, any>): Promise<CallT
     } catch {
       /* evidence capture is best-effort */
     }
+  }
+
+  // One warning as the budget closes in, so the stop is not a surprise that
+  // strands a half-finished scenario with no evidence written.
+  const left = budget - s.turn;
+  if (!isError && left > 0 && left <= 8 && !CLOSING_TOOLS.has(name)) {
+    detail += `\n\n[${left} tool call${left === 1 ? "" : "s"} left in this scenario's budget — start wrapping up: screenshot the current state, record your observations, then done(...).]`;
   }
 
   result = text(detail, isError);

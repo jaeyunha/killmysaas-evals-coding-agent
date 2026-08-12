@@ -17,6 +17,10 @@ overview: >
   spec; this spec grades the depth of the review workflow itself. Note: a scenario's
   persona is its STARTING identity — scenarios may sign out and switch identities
   mid-run; the harness supplies all fixture credentials to every scenario.
+survey_terms:
+  ["Review", "Reviews", "Reviewers", "Evaluation Plans", "Review Rounds",
+   "Review Workflow", "Review Settings", "Scorecards", "Scoring", "Abstracts",
+   "Committee"]
 personas: [organizer, speaker, reviewer]
 scenarios:
   - id: ABS-S1

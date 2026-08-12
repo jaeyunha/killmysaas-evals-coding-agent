@@ -72,6 +72,14 @@ export interface Spec {
   area_weight: number;
   optional?: boolean; // extra-credit area (e.g. speaker-crm)
   overview: string;
+  /**
+   * Label vocabulary this area is known by across clones, used by `survey` to
+   * decide whether an entry point exists. The scenario steps already carry
+   * these synonyms in prose ("it may be called Agenda, Schedule, Program...");
+   * this lifts them somewhere a program can read. Presence-checking only —
+   * nothing here affects scoring.
+   */
+  survey_terms?: string[];
   personas?: string[];
   scenarios: Scenario[];
   rubric: RubricItem[];

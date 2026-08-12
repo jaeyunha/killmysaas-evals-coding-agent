@@ -17,6 +17,8 @@ overview: >
   tasks, file uploads, versioning, approval, the deliverables dashboard, and
   deliverables-reminder emails are owned by the content-management spec; this area owns the
   roster, portal, general/action tasks, and general comms.
+survey_terms:
+  ["Speakers", "People", "Participants", "Contacts", "Roster", "Presenters"]
 personas: [organizer, speaker]
 scenarios:
   - id: SPK-S1

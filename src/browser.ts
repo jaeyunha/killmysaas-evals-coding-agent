@@ -11,6 +11,12 @@ import {
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
+/** Env override for a size budget, ignoring anything that isn't a positive number. */
+function numFromEnv(name: string, fallback: number): number {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 /** "9:30 AM" | "14:05" | "March 5, 2026 9:30am" -> {h, m}. */
 function parseClock(text: string): { h: number; m: number } | null {
   const t = text.trim();
@@ -99,7 +105,10 @@ type TaggedEl = RawEl & { frameLabel: string };
  * Thin Playwright wrapper the agent loop drives. Interactive elements are
  * tagged with data-sbek-ref attributes on every snapshot so the model can
  * address them by stable short refs (e1, e2, ...) instead of guessing CSS
- * selectors. Refs are re-assigned on each snapshot.
+ * selectors. A ref belongs to its element for the life of the session: the
+ * counter only moves forward, so an element seen again keeps its number and a
+ * ref never comes to mean something else. That is what lets actions return
+ * only what changed instead of a whole new page.
  *
  * Containment: the session is pinned to the target origin. Off-origin
  * navigations (redirects, external links, popups) are detected after every
@@ -255,6 +264,67 @@ export class BrowserSession {
   }
 
   /**
+   * The last line shown for each ref, so an action can report only what is
+   * new. Keyed by ref and compared by whole line, so a control that keeps its
+   * ref but changes ("Show form" -> "Hide form", enabled -> disabled) still
+   * gets reported rather than silently going stale in the agent's head.
+   */
+  private emittedRefs = new Map<string, string>();
+
+  private rememberRefs(elementList: string): void {
+    for (const line of elementList.split("\n")) {
+      const ref = /^\[(e\d+)\]/.exec(line)?.[1];
+      if (ref) this.emittedRefs.set(ref, line);
+    }
+  }
+
+  /**
+   * What an action returns instead of a whole new page.
+   *
+   * Re-reading the full snapshot after every click is what made a run
+   * expensive: the same outline and the same element list came back 40 times
+   * per scenario, and each one was re-sent on every later turn. Refs now
+   * survive across snapshots, so everything the agent already knows still
+   * works — the only thing it cannot know is what the action *added*. That is
+   * all this returns: the URL, anything newly interactive, and a pointer to
+   * `snapshot` for the rare case where the page changed out from under it.
+   */
+  private async changes(what: string): Promise<string> {
+    const before = new Map(this.emittedRefs);
+    const full = await this.snapshot();
+    const marker = "INTERACTIVE ELEMENTS (use these refs with click/fill/select):";
+    const cut = full.indexOf(marker);
+    if (cut === -1) return full;
+
+    const head = full.slice(0, cut);
+    const body = full.slice(cut + marker.length).trim();
+    const fresh = body.split("\n").filter((line) => {
+      const ref = /^\[(e\d+)\]/.exec(line)?.[1];
+      return ref ? before.get(ref) !== line : false;
+    });
+
+    const url = /^URL: (.*)$/m.exec(head)?.[1] ?? this.page.url();
+    const modal = /^MODAL OPEN: .*$/m.exec(head)?.[0];
+    const notes = head
+      .split("\n")
+      .filter((l) => l.startsWith("NOTE: ") || l.startsWith("CONTAINMENT"))
+      .join("\n");
+
+    const out = [notes, `${what}`, `URL: ${url}`];
+    if (modal) out.push(modal);
+    out.push(
+      fresh.length
+        ? `NEW OR CHANGED INTERACTIVE ELEMENTS (${fresh.length}):\n${fresh.slice(0, 60).join("\n")}` +
+          (fresh.length > 60 ? `\n... (${fresh.length - 60} more — call snapshot for the full list)` : "")
+        : `Nothing new became interactive.`,
+    );
+    out.push(
+      `Refs from earlier snapshots still point at the same elements — keep using them. Call snapshot only if you need the page outline or a ref reports as stale.`,
+    );
+    return out.filter(Boolean).join("\n");
+  }
+
+  /**
    * Text snapshot of the current page: url, title, aria outline, and an
    * indexed list of interactive elements. This is the agent's primary sense.
    */
@@ -281,11 +351,15 @@ export class BrowserSession {
         aria = "(aria snapshot unavailable)";
       }
     }
-    // Cap the outline so a giant page doesn't blow up the context window.
-    const MAX_ARIA = 12_000;
+    // The outline and the element list below describe the same page, so most of
+    // the outline is a second copy of text the agent already gets in actionable
+    // form. Keep enough of it to orient (headings, page shape) and let the
+    // element list carry the detail. Raise SBEK_MAX_ARIA if a page really needs
+    // more structure than that.
+    const MAX_ARIA = numFromEnv("SBEK_MAX_ARIA", 2_000);
     if (aria.length > MAX_ARIA) aria = aria.slice(0, MAX_ARIA) + "\n... (truncated)";
     for (const fo of frameOutlines) {
-      aria += `\n\n--- content of ${fo.label} ---\n${fo.aria.slice(0, 2_500)}`;
+      aria += `\n\n--- content of ${fo.label} ---\n${fo.aria.slice(0, 800)}`;
     }
 
     const lines = entries.map((el) => {
@@ -293,7 +367,7 @@ export class BrowserSession {
       return `[${el.ref}] <${el.tag}${attrs}> ${el.label}${el.frameLabel ? ` — ${el.frameLabel}` : ""}`;
     });
     let elementList = lines.join("\n");
-    const MAX_ELEMS = 10_000;
+    const MAX_ELEMS = numFromEnv("SBEK_MAX_ELEMS", 6_000);
     if (elementList.length > MAX_ELEMS) elementList = elementList.slice(0, MAX_ELEMS) + "\n... (truncated)";
     // Sidebar chrome routinely accounts for ~40% of a snapshot's refs (every
     // nav item repeats as link + duplicate <span> + a per-item "Pin to top"),
@@ -309,6 +383,7 @@ export class BrowserSession {
     if (editorLines.length) {
       elementList = (elementList ? elementList + "\n" : "") + editorLines.join("\n");
     }
+    this.rememberRefs(elementList);
 
     return [
       this.drainNotes() + (originMsg ? originMsg + "\n" : "") + `URL: ${url}`,
@@ -434,14 +509,17 @@ export class BrowserSession {
           if (allEls.length >= 20000) break;
         }
       }
-      // Clear markers from prior snapshots. In an SPA, elements that survive
-      // navigation (sidebars, headers) keep their old attribute, so a stale
-      // ref would silently resolve to the WRONG element — e.g. clicking "Sign
-      // out" while intending something else. After clearing, a stale ref
-      // resolves to nothing and the tool returns a take-a-new-snapshot error.
+      // Refs deliberately SURVIVE across snapshots. The counter they come from
+      // is monotonic for the life of the session, so a surviving element keeps
+      // a ref that is still uniquely its own — it cannot come to mean a
+      // different element, and an element that disappeared leaves a ref that
+      // resolves to nothing and returns the take-a-new-snapshot error.
+      //
+      // This is what lets actions stop returning a full snapshot: after a
+      // click, every ref the agent already knows still points where it did, so
+      // it can keep acting instead of re-reading the whole page every turn.
       for (let k = 0; k < allEls.length; k++) {
         const el = allEls[k];
-        if (el.hasAttribute("data-sbek-ref")) el.removeAttribute("data-sbek-ref");
         if (el.hasAttribute("data-sbek-modal")) el.removeAttribute("data-sbek-modal");
         if (el.hasAttribute("data-sbek-listed")) el.removeAttribute("data-sbek-listed");
       }
@@ -794,9 +872,15 @@ export class BrowserSession {
           chromeSeen[key] = 1;
         }
 
-        i += 1;
-        const ref = `e${i}`;
-        el.setAttribute("data-sbek-ref", ref);
+        // Keep the ref an element was given the first time it was seen. The
+        // counter only ever moves forward, so a reused ref is still unique to
+        // this element and every ref the agent already holds stays valid.
+        let ref = el.getAttribute("data-sbek-ref") ?? "";
+        if (!ref) {
+          i += 1;
+          ref = `e${i}`;
+          el.setAttribute("data-sbek-ref", ref);
+        }
         const flags: string[] = [];
         if (el.hasAttribute("disabled") || el.getAttribute("aria-disabled") === "true") {
           flags.push("disabled");
@@ -1000,7 +1084,7 @@ export class BrowserSession {
       return `ERROR: ${ref} could not be clicked because ${blocker} is covering it — an overlay, modal, cookie banner, toast or loading veil is in the way. Close or dismiss that layer first (press Escape, or click its close/accept control), then take a fresh snapshot and retry. The control itself is not necessarily broken.`;
     }
     await this.page.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => {});
-    return this.snapshot();
+    return this.changes(`OK: clicked ${ref}.`);
   }
 
   /**
@@ -1055,7 +1139,7 @@ export class BrowserSession {
         this.pendingNotes.push(
           `${ref} is read-only, so text cannot be typed into it — it was CLICKED instead, which normally opens a picker (calendar, time list, or dropdown). Choose "${text.slice(0, 60)}" from the elements now listed below; if no picker appeared, the field may be filled by a nearby control instead.`,
         );
-        return this.snapshot();
+        return this.changes(`OK: clicked read-only field ${ref}.`);
       }
 
       if (TEMPORAL_FORMATS[meta.type]) {
@@ -1462,7 +1546,7 @@ export class BrowserSession {
       await this.page.mouse.up();
     }
     await this.page.waitForLoadState("networkidle", { timeout: 6_000 }).catch(() => {});
-    return this.snapshot();
+    return this.changes(`OK: dragged ${fromRef} onto ${toRef}.`);
   }
 
   async press(key: string): Promise<string> {

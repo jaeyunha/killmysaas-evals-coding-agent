@@ -13,6 +13,9 @@ overview: >
   SessionBoard also markets an AI "Scheduler Agent" that auto-packs unscheduled
   sessions into a conflict-free draft; for this evaluation that AI layer is polish,
   judged only as "some assisted/auto-place capability exists".
+survey_terms:
+  ["Agenda", "Schedule", "Program", "Timetable", "Sessions Calendar",
+   "Schedule Builder", "Sessions"]
 personas: [organizer]
 scenarios:
   - id: AIA-S1

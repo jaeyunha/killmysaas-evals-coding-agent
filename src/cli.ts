@@ -16,7 +16,8 @@ import {
   selectScreenshots,
 } from "./evidence.js";
 import { JUDGE_SYSTEM, JudgementSchema, renderRubric } from "./judgement.js";
-import { CURRENT_RUN_FILE, resolveRunDir, writeCurrentRun } from "./runstate.js";
+import { CURRENT_RUN_FILE, readCurrentRun, resolveRunDir, writeCurrentRun } from "./runstate.js";
+import { renderSurvey, survey, writeSurvey } from "./survey.js";
 import type { AreaScore, RunReport, ScenarioEvidence } from "./types.js";
 
 const HELP = `sbek — SessionBoard Eval Kit v${KIT_VERSION}
@@ -57,6 +58,13 @@ The agent already in your session does the browsing and the judging:
                                cannot bias the verdicts.
   score [--run <dir>]          Validate judgements/*.json and build the report
       [--areas a,b,c]
+
+Cheap triage, before you spend a run:
+  survey --url <url>           Does each area exist at all? Crawls navigation via
+      [--persona organizer]    agent-browser, matches link labels and URLs against
+      [--areas a,b,c]          each area's known vocabulary. No screenshots, no
+      [--max-pages N]          judge, ~1% of a run's tokens. Presence, not a score.
+      [--run <dir>]            Uses the saved session from 'auth' when there is one.
 
   rescore --run <dir>          Rebuild report.html/json from a run's stored evidence
                                and judgements (no API calls). Re-run finalize after.
@@ -202,6 +210,23 @@ async function main() {
         `  4. pnpm run sbek -- score`,
       ].join("\n"),
     );
+    return;
+  }
+
+  if (args.command === "survey") {
+    const config = loadConfig(args);
+    const specs = selectSpecs(loadSpecs(), config.areas, true);
+    const runDir =
+      typeof args.flags.run === "string" ? args.flags.run : readCurrentRun() ?? newRunDir();
+    const persona = typeof args.flags.persona === "string" ? args.flags.persona : "organizer";
+    const maxPages =
+      typeof args.flags["max-pages"] === "string" ? Number(args.flags["max-pages"]) : undefined;
+
+    console.log(`Surveying ${config.url} as ${persona}...\n`);
+    const result = await survey({ url: config.url, specs, persona, maxPages });
+    const file = writeSurvey(runDir, result);
+    console.log(renderSurvey(result));
+    console.log(`\nWritten to ${file}`);
     return;
   }
 

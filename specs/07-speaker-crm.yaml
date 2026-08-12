@@ -15,6 +15,9 @@ overview: >
   specific event's speaker workflow without re-entry. Bulk email outreach with
   personalization and a CRM dashboard with org-wide analytics round out the area.
   This is an OPTIONAL extra-credit area — clones may omit it entirely.
+survey_terms:
+  ["CRM", "Speaker CRM", "Directory", "Speaker Database", "Contacts", "People",
+   "Pipeline", "Sourcing", "Prospects"]
 personas: [organizer]
 scenarios:
   - id: CRM-S1

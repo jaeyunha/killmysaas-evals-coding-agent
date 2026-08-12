@@ -19,6 +19,9 @@ overview: >
   speaker-management spec. Scenarios chain: the organizer sets
   up collection (S1), a speaker uploads and versions a deck (S2), and the
   organizer tracks, reminds, reviews, approves, and exports (S3).
+survey_terms:
+  ["Files", "Content", "Deliverables", "Tasks", "Speaker Tasks", "Uploads",
+   "Assets", "Speaker Portal", "My Tasks", "Progress"]
 personas: [organizer, speaker]
 scenarios:
   - id: CNT-S1

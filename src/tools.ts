@@ -33,12 +33,13 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: "snapshot",
     description:
-      "Take a fresh text snapshot of the current page: URL, title, aria outline, and interactive elements with refs. Use after any action that may have changed the page, and whenever a ref errors as stale.",
+      "Take a full text snapshot of the current page: URL, title, aria outline, and every interactive element with its ref. Expensive — actions already report the URL and any new elements, and refs stay valid, so use this on arriving at an unfamiliar page or when a ref errors as stale, not routinely after each action.",
     input_schema: { type: "object", properties: {} },
   },
   {
     name: "click",
-    description: "Click an element by its ref (e.g. 'e12') from the latest snapshot. Returns a new snapshot.",
+    description:
+      "Click an element by its ref (e.g. 'e12'). Returns the resulting URL and any interactive elements that newly appeared — refs you already have keep working, so you rarely need a snapshot afterwards.",
     input_schema: {
       type: "object",
       properties: { ref: { type: "string" } },
@@ -48,7 +49,7 @@ export const TOOL_DEFS: ToolDef[] = [
   {
     name: "fill",
     description:
-      "Clear and type text into an input, textarea, or rich-text editor identified by ref. Date/time fields accept human wording ('March 5, 2026', '9:30 AM') — they are converted to the format the field requires. A field marked 'readonly' cannot be typed into: filling it clicks it instead, which usually opens a picker, and the result is a fresh snapshot listing the picker's options.",
+      "Clear and type text into an input, textarea, or rich-text editor identified by ref. Date/time fields accept human wording ('March 5, 2026', '9:30 AM') — they are converted to the format the field requires. A field marked 'readonly' cannot be typed into: filling it clicks it instead, which usually opens a picker, and the result lists the picker's options as new elements.",
     input_schema: {
       type: "object",
       properties: { ref: { type: "string" }, text: { type: "string" } },

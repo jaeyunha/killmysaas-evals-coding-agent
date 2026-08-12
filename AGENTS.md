@@ -49,6 +49,30 @@ args:    ["--silent", "exec", "tsx", "src/mcp.ts"]
 cwd:     this repo
 ```
 
+## Phase 0 — survey (optional, cheap)
+
+Before spending a real run, ask the small question: does each area exist at all?
+
+```bash
+pnpm run sbek -- survey --url https://submission.example.com --persona organizer
+```
+
+Drives `agent-browser` in a subprocess to crawl navigation one level deep and
+match link labels and URL segments against each area's `survey_terms`. It signs
+in with the session saved by `sbek auth` when there is one — without it you are
+surveying logged out and every organizer-only area will read absent, which the
+output says explicitly. Writes `runs/<stamp>/survey.json`.
+
+Almost none of this reaches your context: the crawl output stays in the
+subprocess and you see only a per-area table. No screenshots, no accessibility
+trees, no judge.
+
+**A survey is not a score.** `found` means an entry point with the right name
+exists, nothing more — a nav link named "Agenda" proves neither that scheduling
+works nor that it is any good. Never report survey results as an evaluation, and
+never let them stand in for a rubric verdict. Use it to triage which areas
+deserve a run, and to catch a dead URL or an expired session in seconds.
+
 ## Phase 1 — browse
 
 ```bash
@@ -65,8 +89,10 @@ For each unfinished scenario:
    the persona, the sample data. That brief is the real instruction set; follow
    it over anything in this file.
 2. `snapshot` to see what is actionable, then `click` / `fill` / `select` /
-   `press` / `scroll` / `drag` / `upload` by `ref`. Refs are re-assigned on every
-   snapshot, so snapshot again after anything that changes the page.
+   `press` / `scroll` / `drag` / `upload` by `ref`. **Refs are stable for the
+   whole scenario**, so actions return only the URL and what newly appeared —
+   keep using refs you already have, and snapshot again only for the page
+   outline or when a ref reports as stale.
 3. `screenshot({ label })` at every meaningful state and `observe({ note })` for
    every factual finding. The judge sees only this evidence, never your
    reasoning. A scenario with no screenshots is worthless.
@@ -169,7 +195,8 @@ then `pnpm run sbek -- finalize --run runs/<stamp>` folds them in.
 | `src/browser.ts` | the Playwright layer: snapshots, refs, containment, screenshots |
 | `src/brief.ts`, `src/tools.ts` | prompts and tool definitions shared by both drive paths |
 | `src/evidence.ts`, `src/judgement.ts` | the run-directory contract and judge schema |
-| `src/cli.ts` | `list` / `plan` / `judge-brief` / `score` / `auth` / `rescore` / `finalize` / `run` |
+| `src/cli.ts` | `list` / `survey` / `plan` / `judge-brief` / `score` / `auth` / `rescore` / `finalize` / `run` |
+| `src/survey.ts` | Phase 0 presence check: agent-browser crawl, `survey_terms` matching |
 | `src/agent.ts`, `src/judge.ts` | the API path — only these two call Anthropic |
 
 Run `pnpm typecheck` after changing anything under `src/`.

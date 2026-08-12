@@ -82,9 +82,11 @@ For each unfinished scenario, in order:
    persona, the sample data. **Follow that brief; it is the real instruction
    set**, more specific than this file.
 2. `snapshot` to see what is actionable, then `click` / `fill` / `select` /
-   `press` / `scroll` / `drag` / `upload` by `ref`. Refs come from the most
-   recent snapshot and are re-assigned each time, so snapshot again after
-   anything that changes the page.
+   `press` / `scroll` / `drag` / `upload` by `ref`. **Refs are stable** — an
+   element keeps its ref for the whole scenario, so actions return only the URL
+   and whatever newly appeared. Keep acting on refs you already have; snapshot
+   again only when you need the page outline, or when a ref reports as stale
+   (which means that element is genuinely gone).
 3. `screenshot({ label })` at every meaningful state and `observe({ note })` for
    every factual finding — especially a capability the app appears to lack, and
    what you tried before concluding that. The judge sees only this evidence,

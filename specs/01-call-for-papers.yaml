@@ -19,6 +19,9 @@ overview: >
   scored here. Note: a scenario's persona is its STARTING identity — scenarios may
   sign out and switch identities mid-run; the harness supplies all fixture
   credentials to every scenario.
+survey_terms:
+  ["Call for Papers", "CFP", "Submissions", "Submission Form", "Forms", "Apply",
+   "Submit a Talk", "Proposals", "Call for Speakers"]
 personas: [organizer, speaker, reviewer]
 scenarios:
   - id: CFP-S1

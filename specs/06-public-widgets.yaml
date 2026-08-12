@@ -17,6 +17,10 @@ overview: >
   filters. This area evaluates each of the five widgets as a distinct feature,
   plus the shared requirements of public accessibility, embed/share generation,
   and cross-surface data consistency.
+survey_terms:
+  ["Embeds", "Widgets", "Share", "Publish", "Website", "Integrations",
+   "Itinerary", "My Schedule", "Planner", "Schedule Builder", "Public Page",
+   "Event Site"]
 personas: [organizer, attendee]
 scenarios:
   - id: EMB-S1
