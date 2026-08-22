@@ -32,6 +32,28 @@ test("CFP fixture stays deterministic while clone scoring accepts equivalent lab
   assert.match(scenario.steps, /switch to "Talk \(30 min\)"/);
 });
 
+test("abstract-management fixtures remain fresh and disjoint from CFP decisions", () => {
+  const fixture = readJson("fixtures/sample-data.json");
+  const cfpTitles = new Set(fixture.submissions.map((submission: any) => submission.title));
+  const abstractTitles = fixture.abstract_management_submissions.map(
+    (submission: any) => submission.title,
+  );
+
+  assert.equal(abstractTitles.length, 3);
+  assert.equal(new Set(abstractTitles).size, abstractTitles.length);
+  for (const title of abstractTitles) {
+    assert.equal(cfpTitles.has(title), false, `ABS title overlaps a CFP decision target: ${title}`);
+  }
+
+  const spec = fs.readFileSync(path.join(root, "specs/02-abstract-management.yaml"), "utf8");
+  const normalizedSpec = spec.replace(/\s+/g, " ");
+  for (const title of abstractTitles) assert.match(normalizedSpec, new RegExp(title));
+  assert.match(spec, /fresh ABS-specific submissions/i);
+  assert.match(spec, /active, and undecided/i);
+  assert.match(spec, /evaluator precondition failure/i);
+  assert.doesNotMatch(spec, /may even carry\s+.*Rejected decision/is);
+});
+
 test("speaker CSV identities are distinct from every configured persona identity", () => {
   const fixture = readJson("fixtures/sample-data.json");
   const personaNames = new Set(

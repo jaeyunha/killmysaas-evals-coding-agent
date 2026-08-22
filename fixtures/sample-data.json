@@ -98,6 +98,32 @@
       "audience_level": "Beginner"
     }
   ],
+  "abstract_management_submissions": [
+    {
+      "title": "Resilient Deployments Under Load: Progressive Delivery Without Guesswork",
+      "format": "Talk (30 min)",
+      "track": "Platform & Infra",
+      "abstract": "Progressive delivery often stops at percentage rollouts. This session shows how to combine service-level indicators, cohort-aware canaries, automated rollback thresholds, and load-test evidence so releases advance only when production behavior supports the decision.",
+      "audience_level": "Intermediate",
+      "notes_for_reviewers": "Primary abstract-management review target. Add Marcus Okafor as co-author before submission."
+    },
+    {
+      "title": "Evaluating RAG Systems Beyond Vibes: Tests That Catch Retrieval Failures",
+      "format": "Talk (30 min)",
+      "track": "AI Engineering",
+      "abstract": "A practical evaluation stack for retrieval-augmented systems covering corpus fixtures, retrieval recall, groundedness checks, adversarial questions, regression thresholds, and human review calibration with examples from production documentation assistants.",
+      "audience_level": "Advanced",
+      "notes_for_reviewers": "Secondary abstract-management review target."
+    },
+    {
+      "title": "Schema Migrations Without Friday Incidents",
+      "format": "Lightning Talk (10 min)",
+      "track": "Developer Experience",
+      "abstract": "A concise field guide to expand-contract migrations, compatibility windows, backfills, observability, and rollback drills that keep schema changes routine even when applications deploy independently.",
+      "audience_level": "Intermediate",
+      "notes_for_reviewers": "Unassigned isolation sentinel for abstract-management scenarios."
+    }
+  ],
   "review": {
     "rating_example": 4,
     "comment_example": "Strong practical content and a clear narrative arc; abstract could name the specific tooling used. Recommend accept for the Platform track.",
