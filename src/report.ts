@@ -5,6 +5,7 @@ import type {
   AreaScore,
   JudgedItem,
   RubricType,
+  RunModels,
   RunReport,
   ScenarioEvidence,
   Spec,
@@ -19,6 +20,7 @@ const VERDICT_POINTS: Record<Verdict, number | null> = {
   fail: 0,
   not_found: 0,
   cannot_judge: null, // excluded from the denominator; routed to manual queue
+  not_applicable: null, // excluded from both applicable weight and the manual queue
 };
 
 /** Accumulates earned/judgeable/total weight for one slice, then finalises it. */
@@ -26,7 +28,8 @@ class Slice {
   earned = 0;
   judgeable = 0;
   totalWeight = 0;
-  add(weight: number, points: number | null) {
+  add(weight: number, points: number | null, applicable = true) {
+    if (!applicable) return;
     this.totalWeight += weight;
     if (points === null) return;
     this.judgeable += weight;
@@ -61,9 +64,23 @@ function sliceByType(spec: Spec, items: JudgedItem[]): Partial<Record<RubricType
     let s = slices.get(r.type);
     if (!s) slices.set(r.type, (s = new Slice()));
     const item = byId.get(r.id);
-    s.add(r.weight, item ? VERDICT_POINTS[item.verdict] : null);
+    s.add(
+      r.weight,
+      item ? VERDICT_POINTS[item.verdict] : null,
+      item?.verdict !== "not_applicable",
+    );
   }
   return finishSlices(slices);
+}
+
+function assertNotApplicableEligible(spec: Spec, item: JudgedItem, source: string): void {
+  if (item.verdict !== "not_applicable") return;
+  const rubric = spec.rubric.find((r) => r.id === item.id);
+  if (!rubric?.not_applicable_when) {
+    throw new Error(
+      `${source}: ${item.id} uses not_applicable but this rubric item is not eligible; use fail, not_found, or cannot_judge instead.`,
+    );
+  }
 }
 
 export function scoreArea(
@@ -73,29 +90,37 @@ export function scoreArea(
 ): AreaScore {
   let earned = 0;
   let judgeable = 0;
+  let totalWeight = 0;
   const pendingManual: string[] = [];
   const byId = new Map(judgement.items.map((i) => [i.id, i]));
+  for (const item of judgement.items) assertNotApplicableEligible(spec, item, "Judgement");
 
   for (const r of spec.rubric) {
+    const item = byId.get(r.id);
+    if (item?.verdict === "not_applicable") continue;
+    totalWeight += r.weight;
+    const points = item ? VERDICT_POINTS[item.verdict] : null;
     if (r.testability === "manual") {
-      pendingManual.push(r.id);
+      if (points === null || item === undefined) {
+        pendingManual.push(r.id);
+      } else {
+        judgeable += r.weight;
+        earned += points * r.weight;
+      }
       continue;
     }
-    const item = byId.get(r.id);
-    const points = item ? VERDICT_POINTS[item.verdict] : null;
     if (points === null || item === undefined) {
       pendingManual.push(r.id); // cannot_judge → human follow-up
       continue;
     }
     judgeable += r.weight;
     earned += points * r.weight;
-    // auto-partial items also get a manual follow-up for the unverifiable half
-    if (r.testability === "auto-partial" && r.manual_instructions) {
+    // Once a human verdict replaces the auto verdict, the manual half is done.
+    if (r.testability === "auto-partial" && r.manual_instructions && !item.evidence_refs.includes("manual")) {
       pendingManual.push(r.id);
     }
   }
 
-  const totalWeight = spec.rubric.reduce((s, r) => s + r.weight, 0);
   return {
     area: spec.area,
     title: spec.title,
@@ -106,7 +131,7 @@ export function scoreArea(
     totalWeight,
     byType: sliceByType(spec, judgement.items),
     pct: judgeable > 0 ? Math.round((earned / judgeable) * 1000) / 10 : null,
-    coveragePct: totalWeight > 0 ? Math.round((judgeable / totalWeight) * 1000) / 10 : 0,
+    coveragePct: totalWeight > 0 ? Math.round((judgeable / totalWeight) * 1000) / 10 : 100,
     pendingManual,
     items: judgement.items,
     defects: judgement.defects,
@@ -159,7 +184,7 @@ function poolByType(areas: AreaScore[]): Partial<Record<RubricType, WeightSlice>
 export function buildReport(opts: {
   targetUrl: string;
   startedAt: string;
-  models: { agent: string; judge: string };
+  models: RunModels;
   areas: AreaScore[];
 }): RunReport {
   const { targetUrl, startedAt, models, areas } = opts;
@@ -214,7 +239,10 @@ export function writeManualChecklist(runDir: string, specs: Spec[], report: RunR
         auto ? `- Auto-judge said: ${auto.verdict} — ${auto.reasoning}` : ``,
         ``,
       );
-      template[r.id] = { verdict: "pass | partial | fail | not_found", notes: "" };
+      template[r.id] = {
+        verdict: `pass | partial | fail | not_found${r.not_applicable_when ? " | not_applicable" : ""}`,
+        notes: "",
+      };
     }
   }
 
@@ -247,8 +275,15 @@ export function finalizeReport(runDir: string, specs: Spec[]): RunReport {
     fs.readFileSync(manualPath, "utf8"),
   );
 
+  const rubricById = new Map(specs.flatMap((spec) => spec.rubric.map((rubric) => [rubric.id, rubric] as const)));
   const pendingEverywhere = new Set(report.areas.flatMap((a) => a.pendingManual));
-  for (const key of Object.keys(manual)) {
+  for (const [key, entry] of Object.entries(manual)) {
+    const verdict = entry.verdict?.trim().toLowerCase();
+    if (verdict === "not_applicable" && !rubricById.get(key)?.not_applicable_when) {
+      throw new Error(
+        `manual-results.json: ${key} uses not_applicable but this rubric item is not eligible; use fail, not_found, or leave it pending.`,
+      );
+    }
     if (!pendingEverywhere.has(key)) {
       console.warn(
         `manual-results.json entry "${key}" is not pending (already finalized, or unknown id) — ignored. Edit report.json directly to correct an already-finalized verdict.`,
@@ -259,30 +294,17 @@ export function finalizeReport(runDir: string, specs: Spec[]): RunReport {
   for (const area of report.areas) {
     const spec = specs.find((s) => s.area === area.area);
     if (!spec) continue;
-    const remaining: string[] = [];
     for (const id of area.pendingManual) {
       const entry = manual[id];
       const verdict = entry?.verdict?.trim().toLowerCase() as Verdict | undefined;
-      if (!verdict || !(verdict in VERDICT_POINTS) || VERDICT_POINTS[verdict] === null) {
+      if (!verdict || !(verdict in VERDICT_POINTS) || verdict === "cannot_judge") {
         if (entry?.verdict && !entry.verdict.includes("|")) {
+          const eligible = Boolean(spec.rubric.find((r) => r.id === id)?.not_applicable_when);
           console.warn(
-            `manual-results.json: unrecognized verdict "${entry.verdict}" for ${id} — expected pass | partial | fail | not_found. Left pending.`,
+            `manual-results.json: unrecognized verdict "${entry.verdict}" for ${id} — expected pass | partial | fail | not_found${eligible ? " | not_applicable" : ""}. Left pending.`,
           );
         }
-        remaining.push(id);
         continue;
-      }
-      const r = spec.rubric.find((x) => x.id === id)!;
-      const prior = area.items.find((i) => i.id === id);
-      if (r.testability === "auto-partial" && prior && VERDICT_POINTS[prior.verdict] !== null) {
-        // Item was already scored from its auto half; the human verdict on the
-        // real-world half overrides those points rather than adding weight.
-        area.earned +=
-          ((VERDICT_POINTS[verdict] as number) - (VERDICT_POINTS[prior.verdict] as number)) *
-          r.weight;
-      } else {
-        area.judgeable += r.weight;
-        area.earned += (VERDICT_POINTS[verdict] as number) * r.weight;
       }
       const judged: JudgedItem = {
         id,
@@ -291,15 +313,17 @@ export function finalizeReport(runDir: string, specs: Spec[]): RunReport {
         reasoning: `Manual verification: ${entry.notes ?? "(no notes)"}`,
         evidence_refs: ["manual"],
       };
+      assertNotApplicableEligible(spec, judged, "manual-results.json");
       const existing = area.items.findIndex((i) => i.id === id);
       if (existing >= 0) area.items[existing] = judged;
       else area.items.push(judged);
     }
-    area.pendingManual = remaining;
-    area.pct = area.judgeable > 0 ? Math.round((area.earned / area.judgeable) * 1000) / 10 : null;
-    area.coveragePct =
-      area.totalWeight > 0 ? Math.round((area.judgeable / area.totalWeight) * 1000) / 10 : 0;
-    area.byType = sliceByType(spec, area.items);
+    const rescored = scoreArea(
+      spec,
+      { area: area.area, items: area.items, defects: area.defects, area_notes: area.notes },
+      area.scenarios,
+    );
+    Object.assign(area, rescored);
   }
 
   const required = report.areas.filter((a) => !a.optional);
@@ -330,6 +354,7 @@ const VERDICT_COLOR: Record<string, string> = {
   fail: "#cf222e",
   not_found: "#cf222e",
   cannot_judge: "#6e7781",
+  not_applicable: "#6e7781",
 };
 
 const TYPE_BLURB: Record<RubricType, string> = {
@@ -467,7 +492,7 @@ export function writeHtmlReport(runDir: string, report: RunReport): void {
   <p class="warn"><strong>No headline score is reported for this run.</strong> A percentage computed over ${report.overallCoveragePct}% of the rubric is not comparable to other submissions and reads far better than it is evidenced. Provisional figure over the judged subset only: <strong>${report.overallPct === null ? "n/a" : report.overallPct + "%"}</strong>. To obtain a reportable score, work through <code>manual-checklist.md</code> and re-run <code>finalize</code>, and/or re-run the evaluation with a higher <code>--max-turns</code> or pre-authenticated personas.</p>`
       : `<p class="overall">Overall: ${report.overallPct === null ? "n/a" : report.overallPct + "%"}
     <span class="cov">coverage ${report.overallCoveragePct}%</span></p>
-  <p><strong>Read score and coverage together.</strong> The score is computed only over rubric weight that was actually judged; coverage is the share of total rubric weight that reached a verdict.</p>`
+  <p><strong>Read score and coverage together.</strong> The score is computed only over applicable rubric weight that was actually judged; coverage is the share of applicable rubric weight that reached a verdict. Explicit <code>not_applicable</code> items are excluded from both.</p>`
   }
   <p>${report.manualPending} rubric item(s) awaiting manual verification — see <code>manual-checklist.md</code>.</p>
   ${typeTableHtml(report.byType)}

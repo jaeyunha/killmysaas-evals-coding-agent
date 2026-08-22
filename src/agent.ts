@@ -78,6 +78,9 @@ export async function runScenario(opts: {
         model: config.agentModel!,
         max_tokens: 16000,
         cache_control: { type: "ephemeral" },
+        ...(config.agentReasoningEffort
+          ? { output_config: { effort: config.agentReasoningEffort } }
+          : {}),
         system: browseGuidance(config.url, config),
         tools: TOOLS,
         messages,

@@ -31,8 +31,12 @@ scenarios:
          organizer identity Jordan Alvarez from the sample data; otherwise sign in with
          the organizer fixture credentials.
       2. Create the event "DevFlow Conf 2027" (2027-05-12 to 2027-05-14, Moscone West,
-         San Francisco) if no event exists yet. If the clone is single-event or comes
-         pre-seeded, use the existing event.
+         San Francisco) if no event exists yet. Use the fixture timezone
+         (America/Los_Angeles) and the fixture daily hours (09:00 start, 16:00 end)
+         rather than accepting any default end time — an end time at or after 17:00
+         local rolls the UTC-rendered event list end date a day past the agenda's
+         last day. If the clone is single-event or comes pre-seeded, use the
+         existing event.
       3. Find the call-for-papers setup area — it may be called "Call for Papers",
          "CFP", "Submissions", "Submission form", "Forms", or "Apply". Screenshot it.
       4. Configure the three fixture tracks (AI Engineering, Platform & Infra,
@@ -236,7 +240,7 @@ rubric:
     type: depth
     testability: auto
     scenarios: [CFP-S1, CFP-S2]
-    pass_criteria: "A field configured to depend on the session format appears for the workshop-style format and disappears for the talk-style format — visibility follows the controlling answer in both directions. The app's own format vocabulary counts (e.g. 'Workshop' / 'Break Out'); the fixture's duration-labelled names are illustrative, not required"
+    pass_criteria: "A field is configured to depend on the session format and, on the public form, appears for the workshop-style option and disappears for the talk-style option; visibility follows the controlling answer in both directions. The deterministic fixture uses 'Workshop (120 min)', 'Talk (30 min)', and 'Workshop prerequisites', but semantically equivalent format and field labels in a generic clone receive full credit."
     evidence: "Two public-form screenshots, one per format selection, showing the dependent field present then absent (from CFP-S1 logged-out, or CFP-S2 as the speaker if the form requires an account first); builder screenshot of the show-when configuration if the UI exposes one"
   - id: CFP-03
     criterion: "A public CFP portal is reachable without any login and shows event branding/name, the submission deadline, and the configured tracks and formats as selectable options"

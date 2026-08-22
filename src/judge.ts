@@ -6,6 +6,25 @@ import type { AreaJudgement, EvalConfig, ScenarioEvidence, Spec } from "./types.
 import { renderEvidence, selectScreenshots } from "./evidence.js";
 import { JUDGE_SYSTEM, JudgementSchema, renderRubric } from "./judgement.js";
 
+function parseJudgeText(text: string): z.infer<typeof JudgementSchema> | null {
+  const candidates = [text];
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/iu)?.[1];
+  if (fenced) candidates.push(fenced);
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.push(text.slice(firstBrace, lastBrace + 1));
+  }
+  for (const candidate of candidates) {
+    try {
+      return JudgementSchema.parse(JSON.parse(candidate));
+    } catch {
+      // Try the next representation.
+    }
+  }
+  return null;
+}
+
 export async function judgeArea(opts: {
   client: Anthropic;
   config: EvalConfig;
@@ -56,22 +75,46 @@ export async function judgeArea(opts: {
   // A 17-item rubric with cited reasoning plus a defect list overruns 16k and
   // truncates mid-JSON, failing the whole area's parse — so budget 32k. The SDK
   // requires streaming at that size, so stream and parse the final message.
-  const stream = client.messages.stream({
-    model: config.judgeModel!,
-    max_tokens: 32000,
-    system: JUDGE_SYSTEM,
-    messages: [{ role: "user", content }],
-    output_config: { format: zodOutputFormat(JudgementSchema) },
-  });
-  const message = await stream.finalMessage();
+  let message: Anthropic.Message;
+  try {
+    const stream = client.messages.stream({
+      model: config.judgeModel!,
+      max_tokens: 32000,
+      system: JUDGE_SYSTEM,
+      messages: [{ role: "user", content }],
+      output_config: {
+        format: zodOutputFormat(JudgementSchema),
+        ...(config.judgeReasoningEffort ? { effort: config.judgeReasoningEffort } : {}),
+      },
+    });
+    message = await stream.finalMessage();
+  } catch (error) {
+    console.warn(
+      `  structured judge output failed for ${spec.area}; retrying as JSON text: ${
+        error instanceof Error ? error.message.slice(0, 160) : String(error)
+      }`,
+    );
+    const stream = client.messages.stream({
+      model: config.judgeModel!,
+      max_tokens: 32000,
+      system: `${JUDGE_SYSTEM}
+
+Return ONLY one raw JSON object with this shape, without markdown or code fences:
+{"items":[{"id":"rubric id","verdict":"pass|partial|fail|not_found|cannot_judge|not_applicable","confidence":"high|medium|low","reasoning":"specific cited reasoning","evidence_refs":["screenshot or observation reference"]}],"defects":[{"severity":"critical|major|minor","description":"application defect","evidence_refs":["reference"]}],"area_notes":"optional evaluator note"}`,
+      messages: [{ role: "user", content }],
+      ...(config.judgeReasoningEffort
+        ? { output_config: { effort: config.judgeReasoningEffort } }
+        : {}),
+    });
+    message = await stream.finalMessage();
+  }
 
   let parsedOutput: z.infer<typeof JudgementSchema> | null = null;
   if (message.stop_reason !== "refusal") {
     const text = message.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text ?? "";
-    try {
-      parsedOutput = JudgementSchema.parse(JSON.parse(text));
-    } catch (err: any) {
-      console.warn(`  judge output did not parse for ${spec.area}: ${err?.message?.slice(0, 160)}`);
+    parsedOutput = parseJudgeText(text);
+    if (parsedOutput === null) {
+      console.warn(`  judge output did not parse for ${spec.area}`);
     }
   }
   const response = { stop_reason: message.stop_reason, parsed_output: parsedOutput };

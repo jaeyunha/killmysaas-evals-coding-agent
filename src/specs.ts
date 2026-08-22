@@ -114,6 +114,10 @@ function validateSpec(raw: any, file: string): Spec {
       // from the UI-observable half alone.
       problems.push(`rubric ${r.id} is auto-partial but has no manual_instructions for the manual half`);
     }
+    if (r.not_applicable_when !== undefined &&
+        (typeof r.not_applicable_when !== "string" || !r.not_applicable_when.trim())) {
+      problems.push(`rubric ${r.id} not_applicable_when must be a non-empty prerequisite`);
+    }
     const dupId = raw.rubric.filter((x: any) => x.id === r.id).length;
     if (dupId > 1) problems.push(`rubric id ${r.id} appears ${dupId} times in this spec`);
     return r as RubricItem;

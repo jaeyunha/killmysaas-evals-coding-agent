@@ -74,6 +74,7 @@ For each unfinished scenario:
    `feature_not_found`. This writes `evidence.json` and closes the browser; you
    cannot start the next scenario until you do.
 
+
 Budget roughly 70 tool calls per scenario. Rules worth repeating:
 
 - **Judge function, not appearance.** These are clones. "Call for Papers" may be

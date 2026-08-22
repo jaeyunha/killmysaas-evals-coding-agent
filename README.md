@@ -6,7 +6,7 @@ Judging is **implementation-agnostic**: submissions do not need to look like Ses
 
 ## What gets evaluated
 
-**98 rubric items across 20 scenarios in 7 areas** — 86 items (182 weighted points) are required, 12 items (19 points) are extra credit. Each item is individually judged and cited; a scenario is just the browser agent's unit of work, so several rubric items typically share one scenario run.
+**98 rubric items across 20 scenarios in 7 areas** — the default core plan is 86 required items across **18 scenarios**; the 12 Speaker CRM items across 2 scenarios are extra credit and run only with `--include-optional` (or an explicit `--areas speaker-crm`). Each item is individually judged and cited; a scenario is just the browser agent's unit of work, so several rubric items typically share one scenario run.
 
 | Area | Spec | Area weight | Scenarios | Rubric items | Item weight |
 |---|---|---:|---:|---:|---:|
@@ -62,7 +62,7 @@ The [harness path](#running-it-from-inside-claude-code--codex) is below the API 
 
 ```bash
 pnpm install                       # also downloads Playwright Chromium
-cp evalconfig.example.json evalconfig.json   # edit: set the submission URL + any seeded credentials
+cp evalconfig.example.json evalconfig.json   # set URL, candidate SHA, Worker version IDs, and any seeded credentials
 
 pnpm run list                      # see areas / scenarios / rubric coverage
 pnpm run smoke                     # offline Playwright check, no API key needed
@@ -78,6 +78,7 @@ pnpm run eval -- --url <url> --agent-model claude-sonnet-5 --judge-model claude-
 
 Outputs land in `runs/<timestamp>/`:
 
+- `manifest.json` + `run.log` — credential-free provenance (candidate SHA, evaluator HEAD plus dirty state and deterministic source-tree hash, API/web Worker version IDs, target URL, frozen model/reasoning-effort config, and exact scenario plan)
 - `report.html` — human-readable scored report with embedded screenshot evidence
 - `report.json` — machine-readable results
 - `manual-checklist.md` + `manual-results.json` — items needing human verification
@@ -108,7 +109,7 @@ Plus-addressing gives each persona a distinct account on a single inbox, so a su
 
 ### Manual verification (async)
 
-Some rubric items can't be auto-verified (acceptance emails actually arriving, calendar exports opening in a calendar app, second-account visibility). The run emits `manual-checklist.md` with step-by-step instructions. Fill in `manual-results.json` (verdicts: `pass | partial | fail | not_found`), then:
+Some rubric items can't be auto-verified (acceptance emails actually arriving, calendar exports opening in a calendar app, second-account visibility). The run emits `manual-checklist.md` with step-by-step instructions. Fill in `manual-results.json` (verdicts: `pass | partial | fail | not_found`; `not_applicable` appears only for explicitly eligible conditional items), then:
 
 ```bash
 pnpm run finalize -- --run runs/<timestamp>
@@ -155,6 +156,8 @@ pnpm run eval -- --url <url> --areas call-for-papers,public-widgets   # subset o
 pnpm run eval -- --url <url> --scenarios CFP-S1,CFP-S2                # subset of scenarios
 pnpm run eval -- --url <url> --include-optional                       # also run speaker-crm
 pnpm run eval -- --url <url> --headed                                 # watch the browser
+pnpm run eval -- --url <url> --agent-reasoning-effort medium \
+  --judge-reasoning-effort high                                       # frozen in manifest/report
 
 # Cheap pilot before a full run: one scenario, capped turns, small model
 pnpm run eval -- --url <url> --areas ai-agenda --scenarios AIA-S1 \
@@ -199,14 +202,14 @@ This is also the cheap way to raise coverage after the fact: re-run with `--max-
 
 ## Scoring model
 
-**Anatomy of a rubric item** (`specs/*.yaml`, validated at load time): `id`, `criterion`, `weight` (1/2/3), `type` (see the taxonomy table above), `testability` (`auto` | `auto-partial` | `manual`), `pass_criteria`, `evidence` (what the judge should look for), and — for `manual`/`auto-partial` items — `manual_instructions`. Scenarios are natural-language scripts under the same spec; keep them outcome-oriented and reference fixture values by name.
+**Anatomy of a rubric item** (`specs/*.yaml`, validated at load time): `id`, `criterion`, `weight` (1/2/3), `type` (see the taxonomy table above), `testability` (`auto` | `auto-partial` | `manual`), `pass_criteria`, `evidence` (what the judge should look for), and — for `manual`/`auto-partial` items — `manual_instructions`. A conditional item may additionally declare `not_applicable_when`; no item without that explicit prerequisite can receive `not_applicable`. Scenarios are natural-language scripts under the same spec; keep deterministic fixture values in execution steps while writing pass criteria around behavior and accepting semantically equivalent clone vocabulary.
 
 - **Weight** (1/2/3, "polish"/"important"/"core") ranks an item against *its own area's* other items — 178 required points, distributed 31%/50%/19% across w3/w2/w1.
 - **Area weight** (see the table above) sets each area's *share of the overall score*, independent of item weight or item count — required areas sum to 100.
 - **Type** slices the same points by what kind of problem is being probed instead of by area (also above). Reporting only — it never changes a point total, but it's the fastest way to see *how* a submission is failing rather than just *how much*.
-- Judge verdicts map to points: `pass` = 1.0, `partial` = 0.5, `fail`/`not_found` = 0, `cannot_judge` = excluded from the denominator and routed to the manual queue.
+- Judge verdicts map to points: `pass` = 1.0, `partial` = 0.5, `fail`/`not_found` = 0, `cannot_judge` = excluded from the denominator and routed to the manual queue. `not_applicable` is allowed only for explicitly conditional criteria whose prerequisite is proven false; it is excluded from applicable weight and never becomes manual pending.
 - Area score = earned weighted points / judgeable weighted points, using item weight. Overall score = area-weighted mean of area percentages (using area weight), renormalized over whichever required areas actually ran — so a `--areas` subset run still reports a meaningful number for what it covered.
-- **Coverage** is reported alongside every score (area-weighted the same way): the share of total rubric weight that actually reached a verdict. Below **60% coverage the headline score is withheld entirely** and the report says "insufficient coverage" instead — a percentage computed over a fraction of the rubric is not comparable between submissions and reads far better than the evidence supports. Raise coverage by working the manual checklist, pre-authenticating personas, or re-running with more turns.
+- **Coverage** is reported alongside every score (area-weighted the same way): the share of applicable rubric weight that actually reached a verdict. Explicit `not_applicable` items are removed before coverage is calculated. Below **60% coverage the headline score is withheld entirely** and the report says "insufficient coverage" instead — a percentage computed over a fraction of the rubric is not comparable between submissions and reads far better than the evidence supports. Raise coverage by working the manual checklist, pre-authenticating personas, or re-running with more turns.
 - The judge must cite evidence (screenshot paths, observations, transcript turns) for every verdict, and independently reports **defects** it noticed even where no rubric item covers them.
 
 Edit specs freely — add an item, change a weight, retag a type — then run `pnpm run eval -- --url x --dry-run` to validate, or `pnpm run sbek -- rescore --run <dir>` to rescore an existing run's stored evidence against the new rubric with no API calls.

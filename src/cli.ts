@@ -17,6 +17,14 @@ import {
 } from "./evidence.js";
 import { JUDGE_SYSTEM, JudgementSchema, renderRubric } from "./judgement.js";
 import { CURRENT_RUN_FILE, resolveRunDir, writeCurrentRun } from "./runstate.js";
+import {
+  applyManifestModels,
+  captureEvaluatorProvenance,
+  createRunManifest,
+  modelsForReport,
+  readRunManifest,
+  writeRunManifest,
+} from "./manifest.js";
 import type { AreaScore, RunReport, ScenarioEvidence } from "./types.js";
 
 const HELP = `sbek — SessionBoard Eval Kit v${KIT_VERSION}
@@ -37,6 +45,8 @@ Commands:
       [--dry-run]              Validate specs + print the plan; no browser, no API calls
       [--headed]               Show the browser window
       [--agent-model <id>] [--judge-model <id>]
+      [--agent-reasoning-effort <level>] [--judge-reasoning-effort <level>]
+      [--candidate-sha <sha>] [--api-worker-version-id <id>] [--web-worker-version-id <id>]
   auth --persona <name>        Sign in once by hand in a real browser window and save
        [--at /login]           the session, so scenarios for that persona start already
        [--click "<text>"]      logged in (for magic-link / OAuth submissions).
@@ -49,6 +59,7 @@ Run it yourself, inside Claude Code / Codex (no API key, no 'run' command).
 The agent already in your session does the browsing and the judging:
   plan --url <url>             Start a run and print the scenario checklist
       [--areas a,b,c] [--scenarios ID,ID] [--include-optional] [--run <dir>]
+      [--candidate-sha <sha>] [--api-worker-version-id <id>] [--web-worker-version-id <id>]
                                Then drive the browser via the 'sbek' MCP server:
                                start_scenario -> snapshot/click/fill/... -> done
   judge-brief --area <slug>    Print the rubric + evidence + screenshot paths for
@@ -66,6 +77,8 @@ Environment:
   ANTHROPIC_API_KEY            required for 'run' only — the harness path
                                (plan / judge-brief / score) never calls the API
 `;
+
+const EVALUATOR_ROOT = path.resolve(import.meta.dirname, "..");
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -152,6 +165,17 @@ async function main() {
     const runDir = typeof args.flags.run === "string" ? args.flags.run : newRunDir();
     fs.mkdirSync(runDir, { recursive: true });
     writeCurrentRun(runDir);
+    if (!fs.existsSync(path.join(runDir, "manifest.json"))) {
+      writeRunManifest(
+        runDir,
+        createRunManifest({
+          mode: "plan",
+          config,
+          specs,
+          evaluator: captureEvaluatorProvenance(EVALUATOR_ROOT),
+        }),
+      );
+    }
 
     const wanted = config.scenarios?.length ? new Set(config.scenarios) : null;
     const rows = specs.flatMap((s) =>
@@ -247,7 +271,7 @@ async function main() {
         `Write JSON to: ${out}`,
         `Shape:`,
         `{`,
-        `  "items": [{ "id": "<rubric id>", "verdict": "pass|partial|fail|not_found|cannot_judge",`,
+        `  "items": [{ "id": "<rubric id>", "verdict": "pass|partial|fail|not_found|cannot_judge|not_applicable",`,
         `              "confidence": "high|medium|low", "reasoning": "...",`,
         `              "evidence_refs": ["${spec.scenarios[0]?.id ?? "SCN"}/screenshots/003-x.jpg", "obs: ...", "turn 12"] }],`,
         `  "defects": [{ "severity": "critical|major|minor", "description": "...", "where": "..." }],`,
@@ -326,7 +350,7 @@ async function main() {
       startedAt: areaScores.length
         ? (loadAreaEvidence(runDir, specs[0])[0]?.startedAt ?? new Date().toISOString())
         : new Date().toISOString(),
-      models: { agent: "harness (in-session agent)", judge: "harness (in-session judge)" },
+      models: modelsForReport(readRunManifest(runDir), config),
       areas: areaScores,
     });
     fs.writeFileSync(path.join(runDir, "report.json"), JSON.stringify(report, null, 2));
@@ -377,6 +401,19 @@ async function main() {
   const resumeDir = typeof args.flags.resume === "string" ? args.flags.resume : undefined;
   if (resumeDir && !fs.existsSync(resumeDir)) throw new Error(`No such run dir: ${resumeDir}`);
   const runDir = resumeDir ?? newRunDir();
+  if (!resumeDir || !fs.existsSync(path.join(runDir, "manifest.json"))) {
+    writeRunManifest(
+      runDir,
+      createRunManifest({
+        mode: "run",
+        config,
+        specs,
+        evaluator: captureEvaluatorProvenance(EVALUATOR_ROOT),
+      }),
+    );
+  }
+  const runManifest = readRunManifest(runDir);
+  applyManifestModels(config, runManifest);
   const logFile = initLog(runDir);
 
   const priorAreas = new Map<string, AreaScore>();
@@ -411,7 +448,7 @@ async function main() {
     const report = buildReport({
       targetUrl: config.url,
       startedAt,
-      models: { agent: config.agentModel!, judge: config.judgeModel! },
+      models: modelsForReport(runManifest, config),
       areas: areaScores,
     });
     fs.writeFileSync(path.join(runDir, "report.json"), JSON.stringify(report, null, 2));

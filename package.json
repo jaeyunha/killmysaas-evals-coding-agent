@@ -10,6 +10,7 @@
   "packageManager": "pnpm@10.33.1",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
     "sbek": "tsx src/cli.ts",
     "mcp": "tsx src/mcp.ts",
     "plan": "tsx src/cli.ts plan",

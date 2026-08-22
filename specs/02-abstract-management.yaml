@@ -72,7 +72,8 @@ scenarios:
          Alvarez (jordan.organizer@sbek-test.example.com, fixture password) if the site
          has open signup; otherwise sign in with the fixture organizer credentials.
       2. Locate the event "DevFlow Conf 2027". If it does not exist, create it from the
-         sample data (2027-05-12 to 2027-05-14, Moscone West SF, tracks AI Engineering /
+         sample data (2027-05-12 to 2027-05-14, Moscone West SF, timezone
+         America/Los_Angeles, daily hours 09:00-16:00 local, tracks AI Engineering /
          Platform & Infra / Developer Experience, session formats from the fixture).
       3. Open the submissions/proposals list and confirm the three ABS-S1 submissions are
          visible. Screenshot the list.
@@ -318,3 +319,4 @@ rubric:
     pass_criteria: "An AI evaluation feature exists and yields a numeric score plus rationale text attributed to the AI on 'Taming 40-Minute CI'; the results view distinguishes AI from human scores; an admin override to a different value persists after reload. Judge this item only if the clone claims AI review anywhere in its UI or marketing; otherwise score as not applicable per the agent's recorded observation of absence."
     evidence: Screenshots of the AI score with its reasoning text, the AI-vs-human distinction in results, and the persisted override after reload.
     manual_instructions: Read the AI-generated rationale and confirm it is substantive and specific to the abstract's actual content (mentions CI/builds/monorepo concepts) rather than generic boilerplate reusable on any submission.
+    not_applicable_when: The clone makes no AI-assisted review or AI-triage claim anywhere in its UI or supplied submission notes.

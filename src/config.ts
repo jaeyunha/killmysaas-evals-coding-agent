@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { EvalConfig } from "./types.js";
+import type { EvalConfig, ReasoningEffort } from "./types.js";
 
 export const KIT_VERSION = "0.1.0";
 export const DEFAULT_AGENT_MODEL = "claude-opus-5";
@@ -72,6 +72,15 @@ export function loadConfig(args: CliArgs): EvalConfig {
     return typeof v === "string" && v.length > 0 ? v : undefined;
   };
 
+  const reasoningEffort = (name: string, configured?: ReasoningEffort): ReasoningEffort | undefined => {
+    const value = stringFlag(name) ?? configured;
+    if (value === undefined) return undefined;
+    if (!["low", "medium", "high", "xhigh", "max"].includes(value)) {
+      throw new Error(`--${name} must be low | medium | high | xhigh | max (got "${value}")`);
+    }
+    return value as ReasoningEffort;
+  };
+
   const maxTurnsFlag = stringFlag("max-turns");
   const maxTurns = maxTurnsFlag ? Number(maxTurnsFlag) : undefined;
   if (maxTurnsFlag && (!Number.isFinite(maxTurns) || maxTurns! < 1)) {
@@ -84,8 +93,15 @@ export function loadConfig(args: CliArgs): EvalConfig {
     areas,
     scenarios,
     includeOptional: Boolean(args.flags["include-optional"] ?? fileConfig.includeOptional),
+    candidateSha: stringFlag("candidate-sha") ?? fileConfig.candidateSha,
+    workerVersions: {
+      api: stringFlag("api-worker-version-id") ?? fileConfig.workerVersions?.api,
+      web: stringFlag("web-worker-version-id") ?? fileConfig.workerVersions?.web,
+    },
     agentModel: stringFlag("agent-model") ?? fileConfig.agentModel ?? DEFAULT_AGENT_MODEL,
     judgeModel: stringFlag("judge-model") ?? fileConfig.judgeModel ?? DEFAULT_JUDGE_MODEL,
+    agentReasoningEffort: reasoningEffort("agent-reasoning-effort", fileConfig.agentReasoningEffort),
+    judgeReasoningEffort: reasoningEffort("judge-reasoning-effort", fileConfig.judgeReasoningEffort),
     maxTurnsPerScenario: maxTurns ?? fileConfig.maxTurnsPerScenario ?? DEFAULT_MAX_TURNS,
     headless: args.flags.headed ? false : fileConfig.headless ?? true,
   };

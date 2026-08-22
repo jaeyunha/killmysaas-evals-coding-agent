@@ -26,7 +26,10 @@ scenarios:
          password); if that account does not exist yet, sign up with the Jordan
          Alvarez fixture identity.
       2. Open the event "DevFlow Conf 2027" (2027-05-12 to 2027-05-14, Moscone West
-         SF). If no event exists yet, create it with those fixture dates and venue.
+         SF). If no event exists yet, create it with those fixture dates, venue,
+         timezone (America/Los_Angeles), and daily hours (09:00 start, 16:00 end)
+         so the organizer event list and this builder display the same end date.
+         The three event days are May 12, 13, and 14, 2027.
       3. Find the agenda/schedule builder -- it may be called Agenda, Schedule,
          Program, Timetable, or Sessions Calendar. Screenshot the initial builder
          view and record what structural elements it shows (time axis, day

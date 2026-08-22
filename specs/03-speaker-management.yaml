@@ -28,7 +28,9 @@ scenarios:
          Manage). If open signup exists, sign up as organizer Jordan Alvarez using the fixture
          email and password; otherwise sign in with the organizer fixture credentials.
       2. Locate or create the event "DevFlow Conf 2027" using the fixture event details
-         (dates 2027-05-12 to 2027-05-14, Moscone West SF). Fill only what the form requires.
+         (dates 2027-05-12 to 2027-05-14, Moscone West SF, timezone America/Los_Angeles,
+         daily hours 09:00-16:00 local). Fill only what the form requires, but set the
+         timezone and daily hours when the form exposes them.
       3. Open the speakers area for the event. It may be called Speakers, People, Participants,
          Contacts, or Roster. Screenshot its empty or initial state.
       4. Add speaker Priya Raman manually using her fixture data (name, email, title
@@ -37,9 +39,11 @@ scenarios:
       5. Add speaker Marcus Okafor the same way with his fixture data (name, email, title,
          company, bio).
       6. Look for a bulk import control (Import, Upload CSV, Import speakers). If found, upload
-         the speakers.csv fixture, mapping columns if prompted. Screenshot the import flow and
-         the roster afterward showing the imported rows. If no import exists, record that
-         observation explicitly.
+         the speakers.csv fixture, mapping columns if prompted. Its rows are three distinct
+         non-persona speakers (Aisha Bell, Mateo Silva, Dana Kowalski); Priya Raman remains the
+         configured speaker persona used by SPK-S2. Screenshot the import flow and the roster
+         afterward showing the imported rows. If no import exists, record that observation
+         explicitly.
       7. Use the roster search (or a filter) to find "Priya". Screenshot the narrowed list,
          then clear it and screenshot the restored full roster.
       8. Change Priya's status to Confirmed (statuses may be named Invited/Confirmed/Accepted/
@@ -70,7 +74,7 @@ scenarios:
           record how speakers are expected to reach their portal (e.g. self-signup or link).
     success_signals:
       - Filled add-speaker form and the saved Priya record with title/company/bio
-      - Roster listing at least Priya and Marcus (plus CSV-imported speakers if import exists)
+      - Roster listing Priya and Marcus plus the three distinct non-persona CSV speakers if import exists
       - Search narrowing to Priya and restoring on clear
       - Confirmed status badge persisting after reload
       - Sentinel "SBEK-ORG-EDIT-01" in the bio after reload
@@ -202,14 +206,12 @@ rubric:
     scenarios: [SPK-S1]
     pass_criteria: >-
       An import control accepts the speakers.csv fixture (with or without a column-mapping
-      step) and the roster afterward contains the CSV speakers. The fixture CSV repeats the
-      two manually added speakers (Priya, Marcus) plus one new person (Dana Kowalski):
-      Dana appearing as a new record is the pass signal, and merging or skipping the two
-      existing rows by email (dedupe) is acceptable and must not be penalized; duplicate
-      rows for Priya/Marcus are also acceptable for this item.
+      step) and the roster afterward contains its three distinct non-persona speakers: Aisha
+      Bell, Mateo Silva, and Dana Kowalski. Priya Raman remains the configured speaker persona
+      and is not represented by any CSV row, so portal and task checks target her unambiguously.
     evidence: >-
-      Screenshots of the import flow and the roster before/after showing the new Dana
-      Kowalski row; agent observation if no import control exists (fail).
+      Screenshots of the import flow and the roster before/after showing Aisha Bell, Mateo
+      Silva, and Dana Kowalski; agent observation if no import control exists (fail).
   - id: SPK-04
     criterion: "Speakers carry a workflow status that can be changed, persists, and is filterable"
     weight: 2

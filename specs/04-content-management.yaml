@@ -32,7 +32,8 @@ scenarios:
          no account exists and the clone offers open signup, sign up first with
          Jordan's fixture identity and email.
       3. Find or create the event "DevFlow Conf 2027" (2027-05-12 to
-         2027-05-14, Moscone West SF) from the sample data.
+         2027-05-14, Moscone West SF, timezone America/Los_Angeles, daily
+         hours 09:00-16:00 local) from the sample data.
       4. Ensure at least two sessions with two DISTINCT speakers exist. For
          Priya Raman: reuse the accepted "Taming 40-Minute CI: Incremental
          Builds at Monorepo Scale" session if it exists from earlier areas;

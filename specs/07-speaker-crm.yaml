@@ -103,7 +103,8 @@ scenarios:
          speakers.csv fixture data (Priya Raman, Marcus Okafor, Dana Kowalski) so
          the pipeline and outreach steps have material to work with.
       2. Make sure the event "DevFlow Conf 2027" (2027-05-12 to 2027-05-14, Moscone
-         West SF) exists; create it from the fixture data if it does not.
+         West SF, timezone America/Los_Angeles, daily hours 09:00-16:00 local)
+         exists; create it from the fixture data if it does not.
       3. Look for a speaker sourcing pipeline in the CRM area — it may be called
          "Pipeline", "Sourcing", "Prospects", or appear as a kanban board.
          Screenshot the full board and record the stage/column names you see (the

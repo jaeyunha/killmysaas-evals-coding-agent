@@ -45,6 +45,8 @@ export interface RubricItem {
   evidence?: string;
   /** Human instructions for testability: manual (or the manual half of auto-partial). */
   manual_instructions?: string;
+  /** Explicit prerequisite whose proven absence permits a not_applicable verdict. */
+  not_applicable_when?: string;
 }
 
 export interface Scenario {
@@ -124,7 +126,13 @@ export interface ScenarioEvidence {
 // Judge output
 // ---------------------------------------------------------------------------
 
-export type Verdict = "pass" | "partial" | "fail" | "not_found" | "cannot_judge";
+export type Verdict =
+  | "pass"
+  | "partial"
+  | "fail"
+  | "not_found"
+  | "cannot_judge"
+  | "not_applicable";
 
 export interface JudgedItem {
   id: string;
@@ -152,7 +160,7 @@ export interface AreaJudgement {
 // Report
 // ---------------------------------------------------------------------------
 
-/** Earned / judgeable / total rubric weight for one slice (an area, or a type). */
+/** Earned / judgeable / applicable rubric weight for one slice (an area, or a type). */
 export interface WeightSlice {
   earned: number;
   judgeable: number;
@@ -170,7 +178,7 @@ export interface AreaScore {
   /** weighted points earned / weighted points actually judged */
   earned: number;
   judgeable: number;
-  /** Total weight of every rubric item in the area (judged or not). */
+  /** Total applicable weight; explicit not_applicable items are excluded. */
   totalWeight: number;
   pct: number | null; // null when nothing was judgeable
   /**
@@ -187,12 +195,21 @@ export interface AreaScore {
   scenarios: ScenarioEvidence[];
 }
 
+export type ReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
+export interface RunModels {
+  agent: string;
+  judge: string;
+  agentReasoningEffort?: ReasoningEffort;
+  judgeReasoningEffort?: ReasoningEffort;
+}
+
 export interface RunReport {
   targetUrl: string;
   startedAt: string;
   finishedAt: string;
   kitVersion: string;
-  models: { agent: string; judge: string };
+  models: RunModels;
   areas: AreaScore[];
   /**
    * Area-weighted mean of the required areas' percentages (see Spec.area_weight),
@@ -231,6 +248,10 @@ export interface EvalConfig {
   /** Scenario ids to run within the selected areas; empty/undefined = all of them. */
   scenarios?: string[];
   includeOptional?: boolean;
+  /** Immutable candidate revision evaluated by this run. */
+  candidateSha?: string;
+  /** Deployed Cloudflare Worker versions serving the evaluated candidate. */
+  workerVersions?: { api?: string; web?: string };
   /**
    * Override the fixture email for any persona (organizer, speaker, speaker2,
    * reviewer, attendee). Use your own inbox — with plus-addressing for distinct
@@ -240,6 +261,8 @@ export interface EvalConfig {
   credentials?: Record<string, PersonaCredentials>;
   agentModel?: string;
   judgeModel?: string;
+  agentReasoningEffort?: ReasoningEffort;
+  judgeReasoningEffort?: ReasoningEffort;
   maxTurnsPerScenario?: number;
   headless?: boolean;
   /** Extra free-text context about the submission (e.g. "signup is open, seed data preloaded"). */

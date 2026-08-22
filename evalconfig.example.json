@@ -2,6 +2,11 @@
   "url": "https://your-submission.example.com",
   "areas": [],
   "includeOptional": false,
+  "candidateSha": "full-git-sha-of-the-candidate",
+  "workerVersions": {
+    "api": "cloudflare-api-worker-version-id",
+    "web": "cloudflare-web-worker-version-id"
+  },
 
   "//personaEmails": "Point verification / magic-link mail at inboxes YOU control. Plus-addressing gives each persona its own account on a single inbox. These override the placeholder addresses in fixtures/sample-data.json at run time.",
   "personaEmails": {
@@ -22,6 +27,8 @@
 
   "agentModel": "claude-sonnet-5",
   "judgeModel": "claude-opus-5",
+  "agentReasoningEffort": "medium",
+  "judgeReasoningEffort": "high",
   "maxTurnsPerScenario": 70,
   "headless": true,
   "submissionNotes": "Anything the graders should know: seeded demo data, how to reach an organizer account, which routes exist, known quirks."

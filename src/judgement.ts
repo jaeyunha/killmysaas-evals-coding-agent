@@ -12,7 +12,14 @@ export const JudgementSchema = z.object({
   items: z.array(
     z.object({
       id: z.string(),
-      verdict: z.enum(["pass", "partial", "fail", "not_found", "cannot_judge"]),
+      verdict: z.enum([
+        "pass",
+        "partial",
+        "fail",
+        "not_found",
+        "cannot_judge",
+        "not_applicable",
+      ]),
       confidence: z.enum(["high", "medium", "low"]),
       reasoning: z.string(),
       evidence_refs: z.array(z.string()),
@@ -35,8 +42,9 @@ export const JUDGE_SYSTEM = `You are an impartial software evaluator judging whe
 You receive: the rubric (criteria with pass conditions), and evidence gathered by a browser agent (scenario outcomes, its factual observations, an action transcript, and screenshots).
 
 Rules:
+- Accept semantically equivalent labels, status names, navigation, and workflows in generic clones unless a criterion requires a specific machine-consumed value; fixture wording guides deterministic execution, not product vocabulary.
 - Judge ONLY from the evidence. Every verdict must cite specific evidence_refs: screenshot paths (e.g. "screenshots/003-cfp-form-filled.jpg") and/or observations/transcript turns (e.g. "obs: ...", "turn 12").
-- pass: the criterion is clearly satisfied. partial: works but with a meaningful gap named in your reasoning. fail: attempted and broken/incorrect. not_found: the agent searched and the capability appears absent. cannot_judge: the evidence is insufficient to decide (e.g. the agent was blocked before reaching it) — do NOT guess.
+- pass: the criterion is clearly satisfied. partial: works but with a meaningful gap named in your reasoning. fail: attempted and broken/incorrect. not_found: the agent searched and the capability appears absent. cannot_judge: the evidence is insufficient to decide (e.g. the agent was blocked before reaching it) — do NOT guess. not_applicable: use only when the rubric item explicitly allows it and evidence proves the listed prerequisite false; every other item forbids not_applicable. This is not a substitute for not_found or cannot_judge.
 - Distinguish "the clone lacks the feature" (not_found) from "the agent failed to reach it" (cannot_judge). Read the scenario outcome: 'blocked' or 'agent_error' usually means cannot_judge for downstream criteria.
 - Be strict about evidence for 'pass': a form existing is not proof submission works; look for confirmation states, persisted data, list entries.
 - Independently list defects you notice IN THE EVALUATED APPLICATION (broken flows, error states, data loss, misleading UI), even if no rubric item covers them. Defects describe the app, never the evaluation run: a turn limit, an agent that got lost, a harness error, or missing evidence is NOT a defect — that belongs in area_notes and in cannot_judge verdicts.
@@ -51,12 +59,13 @@ export function renderRubric(
     criterion: string;
     pass_criteria: string;
     evidence?: string;
+    not_applicable_when?: string;
   }[],
 ): string {
   return autoItems
     .map(
       (r) =>
-        `- ${r.id} (weight ${r.weight}${r.testability === "auto-partial" ? ", auto-partial: judge only the UI-observable half" : ""}): ${r.criterion}\n  pass when: ${r.pass_criteria}${r.evidence ? `\n  look for: ${r.evidence}` : ""}`,
+        `- ${r.id} (weight ${r.weight}${r.testability === "auto-partial" ? ", auto-partial: judge only the UI-observable half" : ""}): ${r.criterion}\n  pass when: ${r.pass_criteria}${r.evidence ? `\n  look for: ${r.evidence}` : ""}\n  ${r.not_applicable_when ? `not_applicable allowed when: ${r.not_applicable_when}` : "not_applicable is not allowed for this item"}`,
     )
     .join("\n");
 }

@@ -3,6 +3,9 @@
     "name": "DevFlow Conf 2027",
     "tagline": "The developer workflow conference",
     "dates": "2027-05-12 to 2027-05-14",
+    "timezone": "America/Los_Angeles",
+    "start_time": "09:00",
+    "end_time": "16:00",
     "location": "Moscone West, San Francisco, CA",
     "description": "A three-day, three-track conference on developer tooling, AI-assisted engineering, and platform infrastructure.",
     "tracks": [
@@ -22,6 +25,18 @@
       "Room 2A",
       "Room 2B",
       "Workshop Lab"
+    ]
+  },
+  "cfp": {
+    "conditional_fields": [
+      {
+        "field": "workshop_prerequisites",
+        "label": "Workshop prerequisites",
+        "show_when": {
+          "field": "format",
+          "equals": "Workshop (120 min)"
+        }
+      }
     ]
   },
   "identities": {
